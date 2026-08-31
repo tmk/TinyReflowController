@@ -133,6 +133,25 @@
 #include <Adafruit_MAX31856.h> 
 #include <PID_v1.h>
 
+
+// Print on both USB CDC serial and UART
+// https://github.com/tmk/WIP/wiki/ESP32#serial
+#ifdef ARDUINO_USB_MODE
+#if !ARDUINO_USB_CDC_ON_BOOT
+HWCDC HWCDCSerial;
+#endif
+#define serial_begin(baud)     do { Serial0.begin(baud);          HWCDCSerial.begin();              } while (0)
+#define serial_print(...)      do { Serial0.print(__VA_ARGS__);   HWCDCSerial.print(__VA_ARGS__);   } while (0)
+#define serial_println(...)    do { Serial0.println(__VA_ARGS__); HWCDCSerial.println(__VA_ARGS__); } while (0)
+#define serial_printf(...)     do { Serial0.printf(__VA_ARGS__);  HWCDCSerial.printf(__VA_ARGS__);  } while (0)
+#else
+#define serial_begin(baud)     Serial.begin(baud)
+#define serial_print(...)      Serial.print(__VA_ARGS__)
+#define serial_println(...)    Serial.println(__VA_ARGS__)
+#define serial_printf(...)     Serial.printf(__VA_ARGS__)
+#endif
+
+
 // ***** TYPE DEFINITIONS *****
 typedef enum REFLOW_STATE
 {
@@ -350,7 +369,7 @@ void setup()
   oled.clearDisplay();
 
   // Serial communication at 115200 bps
-  Serial.begin(115200);
+  serial_begin(115200);
 
   // Turn off LED (active high)
   digitalWrite(ledPin, LOW);
@@ -406,7 +425,7 @@ void loop()
       // Illegal operation
       reflowState = REFLOW_STATE_ERROR;
       reflowStatus = REFLOW_STATUS_OFF;
-      Serial.println(F("Error"));
+      serial_println(F("Error"));
     }
   }
 
@@ -422,18 +441,28 @@ void loop()
       // Increase seconds timer for reflow curve plot
       timerSeconds++;
       // Send temperature and time stamp to serial
-      Serial.print(timerSeconds);
-      Serial.print(F(","));
-      Serial.print(setpoint);
-      Serial.print(F(","));
-      Serial.print(input);
-      Serial.print(F(","));
-      Serial.println(output);
+      serial_print(timerSeconds);
+      serial_print(F(","));
+      serial_print(setpoint);
+      serial_print(F(","));
+      serial_print(input);
+      serial_print(F(","));
+      serial_print(output);
+      serial_print(F(","));
+      serial_println(lcdMessagesReflowStatus[reflowState]);
     }
     else
     {
       // Turn off red LED
       digitalWrite(ledPin, LOW);
+
+      serial_print(input);
+      serial_print(F(","));
+#if defined(USE_MAX31855)
+      serial_println(thermocouple.readInternal());
+#else
+      serial_println(thermocouple.readCJTemperature());
+#endif
     }
   }
 
@@ -530,7 +559,7 @@ void loop()
         if (switchStatus == SWITCH_1)
         {
           // Send header for CSV file
-          Serial.println(F("Time,Setpoint,Input,Output"));
+          serial_println(F("Time,Setpoint,Input,Output,State"));
           // Intialize seconds timer for serial debug information
           timerSeconds = 0;
           
