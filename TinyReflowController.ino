@@ -129,6 +129,7 @@
 #include <LiquidCrystal.h>
 #include <Adafruit_GFX.h>      // Comment for VERSION 1
 #include <Adafruit_SSD1306.h>  // Comment for VERSION 1 
+#include <Adafruit_MAX31855.h>
 #include <Adafruit_MAX31856.h> 
 #include <PID_v1.h>
 
@@ -174,6 +175,7 @@ typedef enum REFLOW_PROFILE
 // ***** CONSTANTS *****
 // ***** GENERAL *****
 #define VERSION 2 // Replace with 1 or 2
+#define USE_MAX31855    // instead of MAX31856
 
 // ***** GENERAL PROFILE CONSTANTS *****
 #define PROFILE_TYPE_ADDRESS 0
@@ -310,7 +312,11 @@ LiquidCrystal lcd(lcdRsPin, lcdEPin, lcdD4Pin, lcdD5Pin, lcdD6Pin, lcdD7Pin);
 Adafruit_SSD1306 oled(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire);
 #endif
 // MAX31856 thermocouple interface
+#if defined(USE_MAX31855)
+Adafruit_MAX31855 thermocouple(SCK, thermocoupleCSPin, MISO);
+#else
 Adafruit_MAX31856 thermocouple = Adafruit_MAX31856(thermocoupleCSPin);
+#endif
 
 void setup()
 {
@@ -342,7 +348,10 @@ void setup()
 
   // Initialize thermocouple interface
   thermocouple.begin();
+#if defined(USE_MAX31855)
+#else
   thermocouple.setThermocoupleType(MAX31856_TCTYPE_K);
+#endif
 
   // Start-up splash
   digitalWrite(buzzerPin, HIGH);
@@ -408,11 +417,24 @@ void loop()
     // Read thermocouple next sampling period
     nextRead += SENSOR_SAMPLING_TIME;
     // Read current temperature
+#if defined(USE_MAX31855)
+    input = thermocouple.readCelsius();
+#else
     input = thermocouple.readThermocoupleTemperature();
+#endif
     // Check for thermocouple fault
+#if defined(USE_MAX31855)
+    fault = thermocouple.readError();
+#else
     fault = thermocouple.readFault();
+#endif
 
     // If any thermocouple fault is detected
+#if defined(USE_MAX31855)
+    if ((fault & MAX31855_FAULT_OPEN) ||
+        (fault & MAX31855_FAULT_SHORT_GND) ||
+        (fault & MAX31855_FAULT_SHORT_VCC))
+#else
     if ((fault & MAX31856_FAULT_CJRANGE) ||
         (fault & MAX31856_FAULT_TCRANGE) ||
         (fault & MAX31856_FAULT_CJHIGH) ||
@@ -421,6 +443,7 @@ void loop()
         (fault & MAX31856_FAULT_TCLOW) ||
         (fault & MAX31856_FAULT_OVUV) ||
         (fault & MAX31856_FAULT_OPEN))
+#endif
     {
       // Illegal operation
       reflowState = REFLOW_STATE_ERROR;
@@ -715,9 +738,18 @@ void loop()
 
     case REFLOW_STATE_ERROR:
       // Check for thermocouple fault
+#if defined(USE_MAX31855)
+      fault = thermocouple.readError();
+#else
       fault = thermocouple.readFault();
+#endif
 
       // If thermocouple problem is still present
+#if defined(USE_MAX31855)
+    if ((fault & MAX31855_FAULT_OPEN) ||
+        (fault & MAX31855_FAULT_SHORT_GND) ||
+        (fault & MAX31855_FAULT_SHORT_VCC))
+#else
       if ((fault & MAX31856_FAULT_CJRANGE) ||
           (fault & MAX31856_FAULT_TCRANGE) ||
           (fault & MAX31856_FAULT_CJHIGH) ||
@@ -726,6 +758,7 @@ void loop()
           (fault & MAX31856_FAULT_TCLOW) ||
           (fault & MAX31856_FAULT_OVUV) ||
           (fault & MAX31856_FAULT_OPEN))
+#endif
       {
         // Wait until thermocouple wire is connected
         reflowState = REFLOW_STATE_ERROR;
