@@ -253,7 +253,7 @@ unsigned char ledPin = LED_BUILTIN;
 #elif VERSION == 2
 unsigned char ssrPin = A0;
 unsigned char fanPin = A1;
-unsigned char thermocoupleCSPin = 10;
+unsigned char thermocoupleCSPin = SS;
 unsigned char ledPin = 4;
 unsigned char buzzerPin = 5;
 unsigned char switchStartStopPin = 3;
@@ -319,7 +319,7 @@ void setup()
   if ((value == 0) || (value == 1))
   {
     // Valid reflow profile value
-    reflowProfile = value;
+    reflowProfile = (reflowProfile_t)value;
   }
   else
   {
