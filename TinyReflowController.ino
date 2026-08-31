@@ -75,7 +75,7 @@
   ==========================================
   Limor Fried of Adafruit (www.adafruit.com)
   ==========================================
-  Author of Arduino MAX31856 and SSD1306 libraries. Adafruit has been the source 
+  Author of Arduino MAX31856 and SSD1306 libraries. Adafruit has been the source
   of tonnes of tutorials, examples, and libraries for everyone to learn.
 
   ==========================================
@@ -130,7 +130,7 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <Adafruit_MAX31855.h>
-#include <Adafruit_MAX31856.h> 
+#include <Adafruit_MAX31856.h>
 #include <PID_v1.h>
 
 
@@ -485,7 +485,7 @@ void loop()
     {
       oled.print(F("PB"));
     }
-    
+
     // Temperature markers
     oled.setCursor(0, 18);
     oled.print(F("250"));
@@ -515,7 +515,7 @@ void loop()
       oled.print((char)247);
       oled.print(F("C"));
     }
-    
+
     if (reflowStatus == REFLOW_STATUS_ON)
     {
       // We are updating the display faster than sensor reading
@@ -533,13 +533,13 @@ void loop()
         }
       }
     }
-    
+
     unsigned char timeAxis;
     for (timeAxis = 0; timeAxis < x; timeAxis++)
     {
       oled.drawPixel(timeAxis + X_AXIS_START, temperature[timeAxis], WHITE);
     }
-    
+
     // Update screen
     oled.display();
   }
@@ -562,17 +562,17 @@ void loop()
           serial_println(F("Time,Setpoint,Input,Output,State"));
           // Intialize seconds timer for serial debug information
           timerSeconds = 0;
-          
+
           // Initialize reflow plot update timer
           timerUpdate = 0;
-          
+
           for (x = 0; x < (SCREEN_WIDTH - X_AXIS_START); x++)
           {
             temperature[x] = 0;
           }
           // Initialize index for average temperature array used for reflow plot
           x = 0;
-          
+
           // Initialize PID control window starting time
           windowStartTime = millis();
           // Ramp up to minimum soaking temperature
