@@ -232,13 +232,15 @@ const char* lcdMessagesReflowStatus[] = {
 };
 
 // ***** PIN ASSIGNMENT *****
-unsigned char ssrPin = A0;
-unsigned char fanPin = A1;
-unsigned char thermocoupleCSPin = SS;
-unsigned char ledPin = 4;
-unsigned char buzzerPin = 5;
-unsigned char switchStartStopPin = 3;
+// MAX38155(SPI):   4=SCK, 5=SDO,        SS=7
+// MAX38156(SPI):   4=SCK, 5=SDO, 6=SDI, SS=7
+// SSD1306(I2C):    8=SDA, 9=SCL
+unsigned char ssrPin = 0;
+unsigned char ledPin = 1;
 unsigned char switchLfPbPin = 2;
+unsigned char switchStartStopPin = 3;
+unsigned char thermocoupleCSPin = SS;   // 7
+unsigned char buzzerPin = 10;
 
 // ***** PID CONTROL VARIABLES *****
 double setpoint;
