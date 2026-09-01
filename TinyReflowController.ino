@@ -140,7 +140,7 @@
 #if !ARDUINO_USB_CDC_ON_BOOT
 HWCDC HWCDCSerial;
 #endif
-#define serial_begin(baud)     do { Serial0.begin(baud);          HWCDCSerial.begin();              } while (0)
+#define serial_begin(baud)     do { Serial0.begin(baud);    HWCDCSerial.begin(); HWCDCSerial.setTxTimeoutMs(0); } while (0)
 #define serial_print(...)      do { Serial0.print(__VA_ARGS__);   HWCDCSerial.print(__VA_ARGS__);   } while (0)
 #define serial_println(...)    do { Serial0.println(__VA_ARGS__); HWCDCSerial.println(__VA_ARGS__); } while (0)
 #define serial_printf(...)     do { Serial0.printf(__VA_ARGS__);  HWCDCSerial.printf(__VA_ARGS__);  } while (0)
