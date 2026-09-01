@@ -351,12 +351,10 @@ void setup()
 #endif
 
   // Start-up splash
-  digitalWrite(buzzerPin, HIGH);
   oled.begin(SSD1306_SWITCHCAPVCC, 0x3C);
   oled.display();
 
-  digitalWrite(buzzerPin, LOW);
-  delay(2000);
+  tone(buzzerPin,4100,100);
 
   oled.clearDisplay();
   oled.setTextSize(1);
@@ -601,6 +599,7 @@ void loop()
           reflowOvenPID.SetMode(AUTOMATIC);
           // Proceed to preheat stage
           reflowState = REFLOW_STATE_PREHEAT;
+          tone(buzzerPin,4100,1000);
         }
       }
       break;
@@ -661,7 +660,7 @@ void loop()
         // Retrieve current time for buzzer usage
         buzzerPeriod = millis() + 1000;
         // Turn on buzzer to indicate completion
-        digitalWrite(buzzerPin, HIGH);
+        tone(buzzerPin,4100,700);
         // Turn off reflow process
         reflowStatus = REFLOW_STATUS_OFF;
         // Proceed to reflow Completion state
@@ -673,7 +672,7 @@ void loop()
       if (millis() > buzzerPeriod)
       {
         // Turn off buzzer
-        digitalWrite(buzzerPin, LOW);
+        tone(buzzerPin,4100,100);
         // Reflow process ended
         reflowState = REFLOW_STATE_IDLE;
       }
@@ -734,6 +733,7 @@ void loop()
       reflowStatus = REFLOW_STATUS_OFF;
       // Reinitialize state machine
       reflowState = REFLOW_STATE_IDLE;
+      tone(buzzerPin,4100,1000);
     }
   }
   // Switch 2 is pressed
@@ -756,6 +756,7 @@ void loop()
         reflowProfile = REFLOW_PROFILE_LEADFREE;
         EEPROM.write(PROFILE_TYPE_ADDRESS, 0);
       }
+      tone(buzzerPin,1000,200);
     }
   }
   // Switch status has been read
