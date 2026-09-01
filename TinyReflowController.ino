@@ -327,6 +327,10 @@ void setup()
     reflowProfile = REFLOW_PROFILE_LEADFREE;
   }
 
+  // switch pin initialization
+  pinMode(switchStartStopPin, INPUT_PULLUP);
+  pinMode(switchLfPbPin, INPUT_PULLUP);
+
   // SSR pin initialization to ensure reflow oven is off
   digitalWrite(ssrPin, LOW);
   pinMode(ssrPin, OUTPUT);
