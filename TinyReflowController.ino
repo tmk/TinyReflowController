@@ -354,20 +354,18 @@ void setup()
 
   // Start-up splash
   oled.begin(SSD1306_SWITCHCAPVCC, 0x3C);
+  // Flip display 180 deg
+  //oled.setRotation(2);
   oled.display();
 
   tone(buzzerPin,4100,100);
 
   oled.clearDisplay();
-  oled.setTextSize(1);
+  oled.setTextSize(2);
   oled.setTextColor(WHITE);
   oled.setCursor(0, 0);
-  oled.println(F("     Tiny Reflow"));
-  oled.println(F("     Controller"));
-  oled.println();
-  oled.println(F("       v2.00"));
-  oled.println();
-  oled.println(F("      04-03-19"));
+  oled.println(F("TinyReflow"));
+  oled.println(F("v2.00"));
   oled.display();
   delay(3000);
   oled.clearDisplay();
@@ -511,9 +509,11 @@ void loop()
     else
     {
       // Right align temperature reading
-      if (input < 10) oled.setCursor(91, 9);
-      else if (input < 100) oled.setCursor(85,9);
-      else oled.setCursor(80, 9);
+      if (input < 10) oled.setCursor(52, 46);
+      else if (input < 100) oled.setCursor(40, 46);
+      else oled.setCursor(28, 46);
+
+      oled.setTextSize(2);
       // Display current temperature
       oled.print(input);
       oled.print((char)247);
@@ -563,6 +563,7 @@ void loop()
         if (switchStatus == SWITCH_1)
         {
           // Send header for CSV file
+          serial_println(F("TinyReflowController build at " __DATE__ " " __TIME__));
           serial_println(F("Time,Setpoint,Input,Output,State"));
           // Intialize seconds timer for serial debug information
           timerSeconds = 0;
