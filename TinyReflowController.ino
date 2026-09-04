@@ -332,6 +332,8 @@ Adafruit_MAX31856 thermocouple = Adafruit_MAX31856(thermocoupleCSPin);
 
 void setup()
 {
+  EEPROM.begin(128);
+
   // Check current selected reflow profile
   unsigned char value = EEPROM.read(PROFILE_TYPE_ADDRESS);
   if ((value == 0) || (value == 1))
@@ -343,6 +345,7 @@ void setup()
   {
     // Default to lead-free profile
     EEPROM.write(PROFILE_TYPE_ADDRESS, 0);
+    EEPROM.commit();
     reflowProfile = REFLOW_PROFILE_LEADFREE;
   }
 
@@ -781,6 +784,7 @@ void loop()
         // Switch to leaded reflow profile
         reflowProfile = REFLOW_PROFILE_LEADED;
         EEPROM.write(PROFILE_TYPE_ADDRESS, 1);
+        EEPROM.commit();
       }
       // Currently using leaded reflow profile
       else
@@ -788,6 +792,7 @@ void loop()
         // Switch to lead-free profile
         reflowProfile = REFLOW_PROFILE_LEADFREE;
         EEPROM.write(PROFILE_TYPE_ADDRESS, 0);
+        EEPROM.commit();
       }
       tone(buzzerPin,1000,200);
     }
