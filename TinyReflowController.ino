@@ -106,13 +106,15 @@
     >> https://github.com/br3ttb/Arduino-PID-Library
   - Adafruit MAX31856 Library:
     >> https://github.com/adafruit/Adafruit_MAX31856
-  - Adafruit SSD1306 Library:
-    >> https://github.com/adafruit/Adafruit_SSD1306
-  - Adafruit GFX Library:
-    >> https://github.com/adafruit/Adafruit-GFX-Library
+  - Adafruit MAX31855 Library:
+    >> https://github.com/adafruit/Adafruit-MAX31855-library
+  - U8g2:
+    >> https://github.com/olikraus/u8g2
 
   Revision  Description
   ========  ===========
+  Mysetup   ESP32C3 with MAX31855
+            - U8g2 instead of Adafruit GFX/SSD1306 library
   2.00      Support V2 of the Tiny Reflow Controller:
             - Based on ATMega328P 3.3V @ 8MHz
             - Uses SSD1306 128x64 OLED
