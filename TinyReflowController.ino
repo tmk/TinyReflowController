@@ -826,7 +826,7 @@ void loop()
       if (switchValue == switchMask)
       {
         // If minimum debounce period is completed
-        if ((millis() - lastDebounceTime) > DEBOUNCE_PERIOD_MIN)
+        if ((millis() - lastDebounceTime) > (switchMask == SWITCH_1 ? 1500 : DEBOUNCE_PERIOD_MIN))
         {
           // Valid switch press
           switchStatus = switchMask;
