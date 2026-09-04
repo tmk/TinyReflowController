@@ -126,9 +126,7 @@
 #include <SPI.h>
 #include <Wire.h>
 #include <EEPROM.h>
-#include <LiquidCrystal.h>
-#include <Adafruit_GFX.h>
-#include <Adafruit_SSD1306.h>
+#include <U8g2lib.h>
 #include <Adafruit_MAX31855.h>
 #include <Adafruit_MAX31856.h>
 #include <PID_v1.h>
@@ -171,7 +169,7 @@ typedef enum REFLOW_STATUS
   REFLOW_STATUS_ON
 } reflowStatus_t;
 
-typedef	enum SWITCH
+typedef enum SWITCH
 {
   SWITCH_NONE,
   SWITCH_1,
@@ -240,8 +238,8 @@ typedef enum REFLOW_PROFILE
 
 // ***** LCD MESSAGES *****
 const char* lcdMessagesReflowStatus[] = {
-  "Ready",
-  "Pre",
+  "TinyReflow",
+  "PreHeat",
   "Soak",
   "Reflow",
   "Cool",
@@ -302,16 +300,35 @@ unsigned int timerUpdate;
 unsigned char temperature[SCREEN_WIDTH - X_AXIS_START];
 unsigned char x;
 
+
 // PID control interface
 PID reflowOvenPID(&input, &output, &setpoint, kp, ki, kd, DIRECT);
+
 // LCD interface
-Adafruit_SSD1306 oled(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire);
+U8G2_SSD1306_128X64_NONAME_F_HW_I2C oled(U8G2_R0, /* reset=*/ U8X8_PIN_NONE);
+
 // MAX31856 thermocouple interface
 #if defined(USE_MAX31855)
 Adafruit_MAX31855 thermocouple(SCK, thermocoupleCSPin, MISO);
 #else
 Adafruit_MAX31856 thermocouple = Adafruit_MAX31856(thermocoupleCSPin);
 #endif
+
+
+// U8g2 Fonts
+// https://github.com/olikraus/u8g2/wiki/fntlist8#7-pixel-height
+// u8g2_font_6x10_mr        // 5x7 and spacing:1    monospace
+
+// https://github.com/olikraus/u8g2/wiki/fntgrpprofont#profont17
+// u8g2_font_profont17_tf   // 9x17? ascent=11 descent=-3 strWith("A")=8
+// u8g2_font_profont17_mf   // 9x17? ascent=11 descent=-3 strWith("A")=9 monospace
+
+#define FONT_HEIGHT(mergin)     (oled.getAscent() - oled.getDescent() + (mergin))
+// Font line: top=0, bottom=-1
+#define LINE(l, mergin)         (((l) < 0 ? SCREEN_HEIGHT : 0) + FONT_HEIGHT(mergin) * (l) + oled.getAscent())
+// Font column form right edge
+#define FCR(str)     (SCREEN_WIDTH - oled.getStrWidth(str))
+
 
 void setup()
 {
@@ -352,23 +369,19 @@ void setup()
   thermocouple.setThermocoupleType(MAX31856_TCTYPE_K);
 #endif
 
-  // Start-up splash
-  oled.begin(SSD1306_SWITCHCAPVCC, 0x3C);
-  // Flip display 180 deg
-  //oled.setRotation(2);
-  oled.display();
-
   tone(buzzerPin,4100,100);
 
-  oled.clearDisplay();
-  oled.setTextSize(2);
-  oled.setTextColor(WHITE);
-  oled.setCursor(0, 0);
-  oled.println(F("TinyReflow"));
-  oled.println(F("v2.00"));
-  oled.display();
+  oled.begin();
+  // Flip display 180 deg
+  //oled.setRotation(2);
+
+  // Start-up splash
+  oled.clearBuffer();
+  oled.setFont(u8g2_font_profont17_mf);
+  oled.drawStr(0,  LINE(0, 2), "TinyReflow");
+  oled.drawStr(80, LINE(1, 2), "v2.00");
+  oled.sendBuffer();
   delay(3000);
-  oled.clearDisplay();
 
   // Serial communication at 115200 bps
   serial_begin(115200);
@@ -472,13 +485,16 @@ void loop()
   {
     // Update LCD in the next 100 ms
     updateLcd += UPDATE_RATE;
-    oled.clearDisplay();
-    oled.setTextSize(2);
-    oled.setCursor(0, 0);
-    oled.print(lcdMessagesReflowStatus[reflowState]);
-    oled.setTextSize(1);
-    oled.setCursor(115, 0);
 
+    oled.clearBuffer();
+    // Reflow state: top left
+    oled.setFont(u8g2_font_profont17_mf);
+    oled.setCursor(0, LINE(0, 2));
+    oled.print(lcdMessagesReflowStatus[reflowState]);
+
+    // Lead Free / Pb: top right
+    oled.setFont(u8g2_font_6x10_mr);    // 5x7 and spacing:1
+    oled.setCursor(FCR("XX"), LINE(0, 1));
     if (reflowProfile == REFLOW_PROFILE_LEADFREE)
     {
       oled.print(F("LF"));
@@ -489,36 +505,50 @@ void loop()
     }
 
     // Temperature markers
-    oled.setCursor(0, 18);
+    oled.setFont(u8g2_font_6x10_mr);
+    oled.setCursor(0, 26);
     oled.print(F("250"));
-    oled.setCursor(0, 36);
+    oled.setCursor(0, 44);
     oled.print(F("150"));
-    oled.setCursor(0, 54);
+    oled.setCursor(6, 62);
     oled.print(F("50"));
     // Draw temperature and time axis
-    oled.drawLine(18, 18, 18, 63, WHITE);
-    oled.drawLine(18, 63, 127, 63, WHITE);
-    oled.setCursor(115, 0);
+    oled.drawLine(18, 18, 18, 63);
+    oled.drawLine(18, 63, 127, 63);
+
 
     // If currently in error state
     if (reflowState == REFLOW_STATE_ERROR)
     {
-      oled.setCursor(80, 9);
+      oled.setFont(u8g2_font_6x10_mr);
+      oled.setCursor(80, LINE(1, 1));
       oled.print(F("TC Error"));
     }
     else
     {
-      // Right align temperature reading
-      if (input < 10) oled.setCursor(52, 46);
-      else if (input < 100) oled.setCursor(40, 46);
-      else oled.setCursor(28, 46);
-
-      oled.setTextSize(2);
-      // Display current temperature
+      // Temperature: bottom right
+      oled.setFont(u8g2_font_profont17_mf);
+      if      (input <= -100) oled.setCursor(FCR("-999.99\260C"), LINE(-1, 1));
+      else if (input <= -10)  oled.setCursor(FCR("-99.99\260C"),  LINE(-1, 1));
+      else if (input < 0)     oled.setCursor(FCR("-9.99\260C"),   LINE(-1, 1));
+      else if (input < 10)    oled.setCursor(FCR("9.99\260C"),    LINE(-1, 1));
+      else if (input < 100)   oled.setCursor(FCR("99.99\260C"),   LINE(-1, 1));
+      else if (input < 1000)  oled.setCursor(FCR("999.99\260C"),  LINE(-1, 1));
+      else                    oled.setCursor(FCR("9999.99\260C"), LINE(-1, 1));
       oled.print(input);
-      oled.print((char)247);
-      oled.print(F("C"));
+      oled.setCursor(FCR("\260C"), LINE(-1, 1));
+      oled.print(F("\260C"));   // degree Celsius
     }
+
+    // Elapsed time
+    oled.setFont(u8g2_font_profont17_mf);
+    if      (timerSeconds < 10)   oled.setCursor(FCR("9sec"),    LINE(-2, 1));
+    else if (timerSeconds < 100)  oled.setCursor(FCR("99sec"),   LINE(-2, 1));
+    else if (timerSeconds < 1000) oled.setCursor(FCR("999sec"),  LINE(-2, 1));
+    else                          oled.setCursor(FCR("9999sec"), LINE(-2, 1));
+    oled.print(timerSeconds);
+    oled.setCursor(FCR("sec"), LINE(-2, 1));
+    oled.print(F("sec"));
 
     if (reflowStatus == REFLOW_STATUS_ON)
     {
@@ -541,11 +571,11 @@ void loop()
     unsigned char timeAxis;
     for (timeAxis = 0; timeAxis < x; timeAxis++)
     {
-      oled.drawPixel(timeAxis + X_AXIS_START, temperature[timeAxis], WHITE);
+      oled.drawPixel(timeAxis + X_AXIS_START, temperature[timeAxis]);
     }
 
     // Update screen
-    oled.display();
+    oled.sendBuffer();
   }
 
   // Reflow oven controller state machine
