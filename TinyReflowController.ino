@@ -374,7 +374,7 @@ void setup()
   thermocouple.setThermocoupleType(MAX31856_TCTYPE_K);
 #endif
 
-  tone(buzzerPin,4100,100);
+  tone(buzzerPin, 2000, 100);
 
   oled.begin();
   // Flip display 180 deg
@@ -637,7 +637,8 @@ void loop()
           reflowOvenPID.SetMode(AUTOMATIC);
           // Proceed to preheat stage
           reflowState = REFLOW_STATE_PREHEAT;
-          tone(buzzerPin,4100,1000);
+          // Start reflow
+          tone(buzzerPin, 4100, 1000);
         }
       }
       break;
@@ -655,6 +656,7 @@ void loop()
         setpoint = TEMPERATURE_SOAK_MIN + SOAK_TEMPERATURE_STEP;
         // Proceed to soaking state
         reflowState = REFLOW_STATE_SOAK;
+        tone(buzzerPin, 4100, 100);
       }
       break;
 
@@ -673,6 +675,7 @@ void loop()
           setpoint = reflowTemperatureMax;
           // Proceed to reflowing state
           reflowState = REFLOW_STATE_REFLOW;
+          tone(buzzerPin, 4100, 100);
         }
       }
       break;
@@ -688,6 +691,7 @@ void loop()
         setpoint = TEMPERATURE_COOL_MIN;
         // Proceed to cooling state
         reflowState = REFLOW_STATE_COOL;
+        tone(buzzerPin, 4100, 1000);
       }
       break;
 
@@ -697,20 +701,18 @@ void loop()
       {
         // Retrieve current time for buzzer usage
         buzzerPeriod = millis() + 1000;
-        // Turn on buzzer to indicate completion
-        tone(buzzerPin,4100,700);
         // Turn off reflow process
         reflowStatus = REFLOW_STATUS_OFF;
         // Proceed to reflow Completion state
         reflowState = REFLOW_STATE_COMPLETE;
+        tone(buzzerPin, 4100, 700);
       }
       break;
 
     case REFLOW_STATE_COMPLETE:
       if (millis() > buzzerPeriod)
       {
-        // Turn off buzzer
-        tone(buzzerPin,4100,100);
+        // TODO: not needed
         // Reflow process ended
         reflowState = REFLOW_STATE_IDLE;
       }
@@ -771,7 +773,7 @@ void loop()
       reflowStatus = REFLOW_STATUS_OFF;
       // Reinitialize state machine
       reflowState = REFLOW_STATE_IDLE;
-      tone(buzzerPin,4100,1000);
+      tone(buzzerPin, 4100, 1000);
     }
   }
   // Switch 2 is pressed
@@ -796,7 +798,7 @@ void loop()
         EEPROM.write(PROFILE_TYPE_ADDRESS, 0);
         EEPROM.commit();
       }
-      tone(buzzerPin,1000,200);
+      tone(buzzerPin, 1000, 200);
     }
   }
   // Switch status has been read
