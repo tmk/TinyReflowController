@@ -160,7 +160,6 @@ typedef enum REFLOW_STATE
   REFLOW_STATE_SOAK,
   REFLOW_STATE_REFLOW,
   REFLOW_STATE_COOL,
-  REFLOW_STATE_COMPLETE,
   REFLOW_STATE_TOO_HOT,
   REFLOW_STATE_ERROR
 } reflowState_t;
@@ -276,7 +275,6 @@ unsigned long nextCheck;
 unsigned long nextRead;
 unsigned long updateLcd;
 unsigned long timerSoak;
-unsigned long buzzerPeriod;
 unsigned char soakTemperatureMax;
 unsigned char reflowTemperatureMax;
 unsigned long soakMicroPeriod;
@@ -374,7 +372,9 @@ void setup()
   thermocouple.setThermocoupleType(MAX31856_TCTYPE_K);
 #endif
 
-  tone(buzzerPin, 2000, 100);
+  tone(buzzerPin, 3000, 100);
+  delay(100);
+  tone(buzzerPin, 1000, 100);
 
   oled.begin();
   // Flip display 180 deg
@@ -597,6 +597,7 @@ void loop()
         // If switch is pressed to start reflow process
         if (switchStatus == SWITCH_1)
         {
+          // START: IDLE -> PREHEAT
           // Send header for CSV file
           serial_println(F("TinyReflowController build at " __DATE__ " " __TIME__));
           serial_println(F("Time,Setpoint,Input,Output,State"));
@@ -638,7 +639,7 @@ void loop()
           // Proceed to preheat stage
           reflowState = REFLOW_STATE_PREHEAT;
           // Start reflow
-          tone(buzzerPin, 4100, 1000);
+          tone(buzzerPin, 3000, 1000);
         }
       }
       break;
@@ -648,6 +649,7 @@ void loop()
       // If minimum soak temperature is achieve
       if (input >= TEMPERATURE_SOAK_MIN)
       {
+        // PREHEAT -> SOAK
         // Chop soaking period into smaller sub-period
         timerSoak = millis() + soakMicroPeriod;
         // Set less agressive PID parameters for soaking ramp
@@ -656,7 +658,7 @@ void loop()
         setpoint = TEMPERATURE_SOAK_MIN + SOAK_TEMPERATURE_STEP;
         // Proceed to soaking state
         reflowState = REFLOW_STATE_SOAK;
-        tone(buzzerPin, 4100, 100);
+        tone(buzzerPin, 3000, 100);
       }
       break;
 
@@ -669,13 +671,14 @@ void loop()
         setpoint += SOAK_TEMPERATURE_STEP;
         if (setpoint > soakTemperatureMax)
         {
+          // SOAK -> REFLOW
           // Set agressive PID parameters for reflow ramp
           reflowOvenPID.SetTunings(PID_KP_REFLOW, PID_KI_REFLOW, PID_KD_REFLOW);
           // Ramp up to first section of soaking temperature
           setpoint = reflowTemperatureMax;
           // Proceed to reflowing state
           reflowState = REFLOW_STATE_REFLOW;
-          tone(buzzerPin, 4100, 100);
+          tone(buzzerPin, 3000, 100);
         }
       }
       break;
@@ -685,13 +688,14 @@ void loop()
       // Crude method that works like a charm and safe for the components
       if (input >= (reflowTemperatureMax - 5))
       {
+        // REFLOW -> COOL
         // Set PID parameters for cooling ramp
         reflowOvenPID.SetTunings(PID_KP_REFLOW, PID_KI_REFLOW, PID_KD_REFLOW);
         // Ramp down to minimum cooling temperature
         setpoint = TEMPERATURE_COOL_MIN;
         // Proceed to cooling state
         reflowState = REFLOW_STATE_COOL;
-        tone(buzzerPin, 4100, 1000);
+        tone(buzzerPin, 3000, 1000);
       }
       break;
 
@@ -699,22 +703,12 @@ void loop()
       // If minimum cool temperature is achieve
       if (input <= TEMPERATURE_COOL_MIN)
       {
-        // Retrieve current time for buzzer usage
-        buzzerPeriod = millis() + 1000;
+        // COOL -> IDLE
         // Turn off reflow process
         reflowStatus = REFLOW_STATUS_OFF;
         // Proceed to reflow Completion state
-        reflowState = REFLOW_STATE_COMPLETE;
-        tone(buzzerPin, 4100, 700);
-      }
-      break;
-
-    case REFLOW_STATE_COMPLETE:
-      if (millis() > buzzerPeriod)
-      {
-        // TODO: not needed
-        // Reflow process ended
         reflowState = REFLOW_STATE_IDLE;
+        tone(buzzerPin, 3000, 3000);
       }
       break;
 
@@ -768,12 +762,12 @@ void loop()
     // If currently reflow process is on going
     if (reflowStatus == REFLOW_STATUS_ON)
     {
-      // Button press is for cancelling
+      // ABORT
       // Turn off reflow process
       reflowStatus = REFLOW_STATUS_OFF;
       // Reinitialize state machine
       reflowState = REFLOW_STATE_IDLE;
-      tone(buzzerPin, 4100, 1000);
+      tone(buzzerPin, 3000, 1000);
     }
   }
   // Switch 2 is pressed
@@ -798,6 +792,7 @@ void loop()
         EEPROM.write(PROFILE_TYPE_ADDRESS, 0);
         EEPROM.commit();
       }
+      // button click
       tone(buzzerPin, 1000, 200);
     }
   }
