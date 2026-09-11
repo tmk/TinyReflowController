@@ -329,6 +329,15 @@ Adafruit_MAX31856 thermocouple = Adafruit_MAX31856(thermocoupleCSPin);
 // Font column form right edge
 #define FCR(str)     (SCREEN_WIDTH - oled.getStrWidth(str))
 
+static void drawStrInverted(u8g2_uint_t x, u8g2_uint_t y, const char *s)
+{
+  oled.setDrawColor(1);
+  oled.drawBox(x, y - oled.getAscent(), oled.getStrWidth(s), FONT_HEIGHT(0));
+  oled.setDrawColor(0);
+  oled.drawStr(x, y, s);
+  oled.setDrawColor(1);
+}
+
 
 void setup()
 {
@@ -494,8 +503,11 @@ void loop()
     oled.clearBuffer();
     // Reflow state: top left
     oled.setFont(u8g2_font_profont17_mf);
-    oled.setCursor(0, LINE(0, 2));
-    oled.print(lcdMessagesReflowStatus[reflowState]);
+    if (digitalRead(ssrPin) == HIGH) {
+        drawStrInverted(0, LINE(0,2), lcdMessagesReflowStatus[reflowState]);
+    } else {
+        oled.drawStr(0, LINE(0,2), lcdMessagesReflowStatus[reflowState]);
+    }
 
     // Lead Free / Pb: top right
     oled.setFont(u8g2_font_6x10_mr);    // 5x7 and spacing:1
