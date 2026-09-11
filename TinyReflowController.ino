@@ -244,7 +244,6 @@ const char* lcdMessagesReflowStatus[] = {
   "Soak",
   "Reflow",
   "Cool",
-  "Done!",
   "Hot!",
   "Error"
 };
