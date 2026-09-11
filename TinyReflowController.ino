@@ -571,11 +571,11 @@ void loop()
       // We are updating the display faster than sensor reading
       if (timerSeconds > timerUpdate)
       {
-        // Store temperature reading every 3 s
-        if ((timerSeconds % 3) == 0)
+        // Store temperature reading every 5 s
+        if ((timerSeconds % 5) == 0 && (x > 0 || input > 50))
         {
           timerUpdate = timerSeconds;
-          unsigned char averageReading = map(input, 0, 250, 63, 19);
+          unsigned char averageReading = map(input, 50, 250, 63, 19);
           if (x < (SCREEN_WIDTH - X_AXIS_START))
           {
             temperature[x++] = averageReading;
