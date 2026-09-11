@@ -15,52 +15,53 @@
   during system idle. The unit will remember the last selected reflow profile.
   You'll need to use the MAX31856 library for Arduino.
 
-  Lead-Free Reflow Curve
-  ======================
-
-  Temperature (Degree Celcius)                 Magic Happens Here!
-  245-|                                               x  x
-      |                                            x        x
-      |                                         x              x
-      |                                      x                    x
-  200-|                                   x                          x
-      |                              x    |                          |   x
-      |                         x         |                          |       x
-      |                    x              |                          |
-  150-|               x                   |                          |
-      |             x |                   |                          |
-      |           x   |                   |                          |
-      |         x     |                   |                          |
-      |       x       |                   |                          |
-      |     x         |                   |                          |
-      |   x           |                   |                          |
-  30 -| x             |                   |                          |
-      |<  60 - 90 s  >|<    90 - 120 s   >|<       90 - 120 s       >|
-      | Preheat Stage |   Soaking Stage   |       Reflow Stage       | Cool
-   0  |_ _ _ _ _ _ _ _|_ _ _ _ _ _ _ _ _ _|_ _ _ _ _ _ _ _ _ _ _ _ _ |_ _ _ _ _
+  ChipQuik SMD291NSL/TS391SNL(Sn96.5/Ag3.0/Cu0.5)
+  ===============================================
+  https://www.chipquik.com/datasheets/SMD291SNL50T3.pdf
+  Temperature (Degree Celcius)
+  249-|                                         x x x
+      |                                       x   |   x
+  217-|                                     x     |     x
+      |                                   x |     |     | x
+      |                                 x   |     |     |   x
+  175-|                               x     |     |     |    x
+      |                       x x x x |     |     |     |     x
+  150-|               x x x x         |     |     |     |      x
+      |             x |               |     |     |     |      x
+      |           x   |               |     |     |     |       x
+      |         x     |               | 30s | 30s | 30s |       x
+      |       x       |               |     |     |     |        x
+      |     x         |               |           |              x
+      |   x   1.4C/s  |    0.28C/s    |  1.25C/s  |  -1.1C/s
+  25 -| x             |               |           |
+      |      90s      |      90s      |           |
+      |     Preheat   |     Soaking   |   Reflow  |    Cool
+   0  |_ _ _ _ _ _ _ _|_ _ _ _ _ _ _ _|_ _ _ _ _ _|_ _ _ _ _ _ _ _ _ _ _
                                                                  Time (Seconds)
 
-  Leaded Reflow Curve (Kester EP256)
-  ==================================
-
-  Temperature (Degree Celcius)         Magic Happens Here!
-  219-|                                       x  x
-      |                                    x        x
-      |                                 x              x
-  180-|                              x                    x
-      |                         x    |                    |   x
-      |                    x         |                    |       x
-  150-|               x              |                    |           x
-      |             x |              |                    |
-      |           x   |              |                    |
-      |         x     |              |                    |
-      |       x       |              |                    |
-      |     x         |              |                    |
-      |   x           |              |                    |
-  30 -| x             |              |                    |
-      |<  60 - 90 s  >|<  60 - 90 s >|<   60 - 90 s      >|
-      | Preheat Stage | Soaking Stage|   Reflow Stage     | Cool
-   0  |_ _ _ _ _ _ _ _|_ _ _ _ _ _ _ |_ _ _ _ _ _ _ _ _ _ |_ _ _ _ _ _ _ _ _ _ _
+  ChipQuik SMD291AX/TS391AX(Sn63/Pb37)
+  ====================================
+  https://www.chipquik.com/datasheets/SMD291AX50T3.pdf
+  Temperature (Degree Celcius)
+      |
+  235-|                                         x x x
+      |                                       x   |   x
+  183-|                                     x     |     x
+      |                                   x |     |     | x
+      |                                 x   |     |     |   x
+  150-|                               x     |     |     |    x
+      |                       x x x x |     |     |     |     x
+  100-|               x x x x         |     |     |     |      x
+      |             x |               |     |     |     |      x
+      |           x   |               |     |     |     |       x
+      |         x     |               | 30s | 60s | 30s |       x
+      |       x       |               |     |     |     |        x
+      |     x         |               |           |              x
+      |   x   2.5C/s  |    0.55C/s    |  0.94C/s  |  -1.7C/s
+  25 -| x             |               |           |
+      |      30s      |      90s      |           |
+      |     Preheat   |     Soaking   |   Reflow  |    Cool
+   0  |_ _ _ _ _ _ _ _|_ _ _ _ _ _ _ _|_ _ _ _ _ _|_ _ _ _ _ _ _ _ _ _ _
                                                                  Time (Seconds)
 
   This firmware owed very much on the works of other talented individuals as
@@ -203,13 +204,15 @@ typedef enum REFLOW_PROFILE
 #define SOAK_TEMPERATURE_STEP 5
 
 // ***** LEAD FREE PROFILE CONSTANTS *****
+#define TEMPERATURE_SOAK_MIN_LF 150
 #define TEMPERATURE_SOAK_MAX_LF 200
-#define TEMPERATURE_REFLOW_MAX_LF 250
+#define TEMPERATURE_REFLOW_MAX_LF 249
 #define SOAK_MICRO_PERIOD_LF 9000
 
 // ***** LEADED PROFILE CONSTANTS *****
-#define TEMPERATURE_SOAK_MAX_PB 180
-#define TEMPERATURE_REFLOW_MAX_PB 224
+#define TEMPERATURE_SOAK_MIN_PB 100
+#define TEMPERATURE_SOAK_MAX_PB 150
+#define TEMPERATURE_REFLOW_MAX_PB 235
 #define SOAK_MICRO_PERIOD_PB 10000
 
 // ***** SWITCH SPECIFIC CONSTANTS *****
@@ -471,9 +474,9 @@ void loop()
       // Send temperature and time stamp to serial
       serial_print(timerSeconds);
       serial_print(F(","));
-      serial_print(setpoint);
-      serial_print(F(","));
       serial_print(input);
+      serial_print(F(","));
+      serial_print(setpoint);
       serial_print(F(","));
       serial_print(output);
       serial_print(F(","));
@@ -611,7 +614,7 @@ void loop()
           // START: IDLE -> PREHEAT
           // Send header for CSV file
           serial_println(F("TinyReflowController build at " __DATE__ " " __TIME__));
-          serial_println(F("Time,Setpoint,Input,Output,State"));
+          serial_println(F("Time,Input,Setpoint,Output,State"));
           // Intialize seconds timer for serial debug information
           timerSeconds = 0;
 
