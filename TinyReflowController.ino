@@ -195,7 +195,6 @@ const char* lcdMessagesReflowStatus[] = {
 // MAX38156(SPI):   4=SCK, 5=SDO, 6=SDI, CS=7
 // SSD1306(I2C):    8=SDA, 9=SCL
 unsigned char ssrPin = 0;
-unsigned char ledPin = 2;
 unsigned char switchLfPbPin = 7;
 unsigned char switchStartStopPin = 10;
 unsigned char thermocoupleCSPin = 3;
@@ -331,10 +330,6 @@ void setup()
   digitalWrite(buzzerPin, LOW);
   pinMode(buzzerPin, OUTPUT);
 
-  // LED pins initialization and turn on upon start-up (active high)
-  pinMode(ledPin, OUTPUT);
-  digitalWrite(ledPin, HIGH);
-
   // Initialize thermocouple interface
   thermocouple.begin();
 #if defined(USE_MAX31855)
@@ -361,8 +356,6 @@ void setup()
   // Serial communication at 115200 bps
   serial_begin(115200);
 
-  // Turn off LED (active high)
-  digitalWrite(ledPin, LOW);
   // Set window size
   windowSize = 2000;
   // Initialize time keeping variable
@@ -378,17 +371,19 @@ void loop()
   // Current time
   unsigned long now;
 
-  // Time to read thermocouple?
+  // Thermocouple
   if (millis() > nextRead)
   {
     // Read thermocouple next sampling period
     nextRead += SENSOR_SAMPLING_TIME;
+
     // Read current temperature
 #if defined(USE_MAX31855)
     input = thermocouple.readCelsius();
 #else
     input = thermocouple.readThermocoupleTemperature();
 #endif
+
     // Check for thermocouple fault
 #if defined(USE_MAX31855)
     fault = thermocouple.readError();
@@ -423,11 +418,10 @@ void loop()
   {
     // Check input in the next seconds
     nextCheck += SENSOR_SAMPLING_TIME;
+
     // If reflow process is on going
     if (reflowStatus == REFLOW_STATUS_ON)
     {
-      // Toggle red LED as system heart beat
-      digitalWrite(ledPin, !(digitalRead(ledPin)));
       // Increase seconds timer for reflow curve plot
       timerSeconds++;
       // Send temperature and time stamp to serial
@@ -443,9 +437,6 @@ void loop()
     }
     else
     {
-      // Turn off red LED
-      digitalWrite(ledPin, LOW);
-
       serial_print(input);
       serial_print(F(","));
 #if defined(USE_MAX31855)
