@@ -15,54 +15,6 @@
   during system idle. The unit will remember the last selected reflow profile.
   You'll need to use the MAX31856 library for Arduino.
 
-  ChipQuik SMD291NSL/TS391SNL(Sn96.5/Ag3.0/Cu0.5)
-  ===============================================
-  https://www.chipquik.com/datasheets/SMD291SNL50T3.pdf
-  Temperature (Degree Celcius)
-  249-|                                         x x x
-      |                                       x   |   x
-  217-|                                     x     |     x
-      |                                   x |     |     | x
-      |                                 x   |     |     |   x
-  175-|                               x     |     |     |    x
-      |                       x x x x |     |     |     |     x
-  150-|               x x x x         |     |     |     |      x
-      |             x |               |     |     |     |      x
-      |           x   |               |     |     |     |       x
-      |         x     |               | 30s | 30s | 30s |       x
-      |       x       |               |     |     |     |        x
-      |     x         |               |           |              x
-      |   x   1.4C/s  |    0.28C/s    |  1.25C/s  |  -1.1C/s
-  25 -| x             |               |           |
-      |      90s      |      90s      |           |
-      |     Preheat   |     Soaking   |   Reflow  |    Cool
-   0  |_ _ _ _ _ _ _ _|_ _ _ _ _ _ _ _|_ _ _ _ _ _|_ _ _ _ _ _ _ _ _ _ _
-                                                                 Time (Seconds)
-
-  ChipQuik SMD291AX/TS391AX(Sn63/Pb37)
-  ====================================
-  https://www.chipquik.com/datasheets/SMD291AX50T3.pdf
-  Temperature (Degree Celcius)
-      |
-  235-|                                         x x x
-      |                                       x   |   x
-  183-|                                     x     |     x
-      |                                   x |     |     | x
-      |                                 x   |     |     |   x
-  150-|                               x     |     |     |    x
-      |                       x x x x |     |     |     |     x
-  100-|               x x x x         |     |     |     |      x
-      |             x |               |     |     |     |      x
-      |           x   |               |     |     |     |       x
-      |         x     |               | 30s | 60s | 30s |       x
-      |       x       |               |     |     |     |        x
-      |     x         |               |           |              x
-      |   x   2.5C/s  |    0.55C/s    |  0.94C/s  |  -1.7C/s
-  25 -| x             |               |           |
-      |      30s      |      90s      |           |
-      |     Preheat   |     Soaking   |   Reflow  |    Cool
-   0  |_ _ _ _ _ _ _ _|_ _ _ _ _ _ _ _|_ _ _ _ _ _|_ _ _ _ _ _ _ _ _ _ _
-                                                                 Time (Seconds)
 
   This firmware owed very much on the works of other talented individuals as
   follows:
@@ -135,22 +87,57 @@
 #include <PID_v1.h>
 
 
-// Print on both USB CDC serial and UART
-// https://github.com/tmk/WIP/wiki/ESP32#serial
-#ifdef ARDUINO_USB_MODE
-#if !ARDUINO_USB_CDC_ON_BOOT
-HWCDC HWCDCSerial;
-#endif
-#define serial_begin(baud)     do { Serial0.begin(baud);    HWCDCSerial.begin(); HWCDCSerial.setTxTimeoutMs(0); } while (0)
-#define serial_print(...)      do { Serial0.print(__VA_ARGS__);   HWCDCSerial.print(__VA_ARGS__);   } while (0)
-#define serial_println(...)    do { Serial0.println(__VA_ARGS__); HWCDCSerial.println(__VA_ARGS__); } while (0)
-#define serial_printf(...)     do { Serial0.printf(__VA_ARGS__);  HWCDCSerial.printf(__VA_ARGS__);  } while (0)
-#else
-#define serial_begin(baud)     Serial.begin(baud)
-#define serial_print(...)      Serial.print(__VA_ARGS__)
-#define serial_println(...)    Serial.println(__VA_ARGS__)
-#define serial_printf(...)     Serial.printf(__VA_ARGS__)
-#endif
+// ***** PID PARAMETERS *****
+// ***** PRE-HEAT STAGE *****
+#define PID_KP_PREHEAT 100
+#define PID_KI_PREHEAT 0.025
+#define PID_KD_PREHEAT 20
+// ***** SOAKING STAGE *****
+#define PID_KP_SOAK 300
+#define PID_KI_SOAK 0.05
+#define PID_KD_SOAK 250
+// ***** REFLOW STAGE *****
+#define PID_KP_REFLOW 300
+#define PID_KI_REFLOW 0
+#define PID_KD_REFLOW 950
+#define PID_SAMPLE_TIME 1000
+
+
+// ***** GENERAL PROFILE CONSTANTS *****
+#define PROFILE_TYPE_ADDRESS 0
+#define TEMPERATURE_ROOM 50
+#define TEMPERATURE_COOL_MIN 100
+#define SENSOR_SAMPLING_TIME 1000
+
+
+// ***** LEAD FREE PROFILE CONSTANTS *****
+#define TEMPERATURE_SOAK_MIN_LF 150
+#define TEMPERATURE_SOAK_MAX_LF 175
+#define TEMPERATURE_REFLOW_MAX_LF 249
+#define SOAK_STEP_TEMP_LF 1.4
+#define SOAK_STEP_PERIOD_LF 5000
+
+// ***** LEADED PROFILE CONSTANTS *****
+#define TEMPERATURE_SOAK_MIN_PB 100
+#define TEMPERATURE_SOAK_MAX_PB 150
+#define TEMPERATURE_REFLOW_MAX_PB 235
+#define SOAK_STEP_TEMP_PB 2.8
+#define SOAK_STEP_PERIOD_PB 5000
+
+
+// ***** SWITCH SPECIFIC CONSTANTS *****
+#define DEBOUNCE_PERIOD_MIN 100
+
+
+// ***** DISPLAY SPECIFIC CONSTANTS *****
+#define UPDATE_RATE 100
+#define SCREEN_WIDTH 128 // OLED display width, in pixels
+#define SCREEN_HEIGHT 64 // OLED display height, in pixels
+#define X_AXIS_START 18 // X-axis starting position
+
+
+// Thermocouple
+#define USE_MAX31855    // instead of MAX31856
 
 
 // ***** TYPE DEFINITIONS *****
@@ -191,55 +178,6 @@ typedef enum REFLOW_PROFILE
   REFLOW_PROFILE_LEADED
 } reflowProfile_t;
 
-// ***** CONSTANTS *****
-// ***** GENERAL *****
-#define USE_MAX31855    // instead of MAX31856
-
-// ***** GENERAL PROFILE CONSTANTS *****
-#define PROFILE_TYPE_ADDRESS 0
-#define TEMPERATURE_ROOM 50
-#define TEMPERATURE_COOL_MIN 100
-#define SENSOR_SAMPLING_TIME 1000
-
-// ***** LEAD FREE PROFILE CONSTANTS *****
-#define TEMPERATURE_SOAK_MIN_LF 150
-#define TEMPERATURE_SOAK_MAX_LF 175
-#define TEMPERATURE_REFLOW_MAX_LF 249
-#define SOAK_STEP_TEMP_LF 1.4
-#define SOAK_STEP_PERIOD_LF 5000
-
-// ***** LEADED PROFILE CONSTANTS *****
-#define TEMPERATURE_SOAK_MIN_PB 100
-#define TEMPERATURE_SOAK_MAX_PB 150
-#define TEMPERATURE_REFLOW_MAX_PB 235
-#define SOAK_STEP_TEMP_PB 2.8
-#define SOAK_STEP_PERIOD_PB 5000
-
-// ***** SWITCH SPECIFIC CONSTANTS *****
-#define DEBOUNCE_PERIOD_MIN 100
-
-// ***** DISPLAY SPECIFIC CONSTANTS *****
-#define UPDATE_RATE 100
-
-// ***** PID PARAMETERS *****
-// ***** PRE-HEAT STAGE *****
-#define PID_KP_PREHEAT 100
-#define PID_KI_PREHEAT 0.025
-#define PID_KD_PREHEAT 20
-// ***** SOAKING STAGE *****
-#define PID_KP_SOAK 300
-#define PID_KI_SOAK 0.05
-#define PID_KD_SOAK 250
-// ***** REFLOW STAGE *****
-#define PID_KP_REFLOW 300
-#define PID_KI_REFLOW 0
-#define PID_KD_REFLOW 950
-#define PID_SAMPLE_TIME 1000
-
-#define SCREEN_WIDTH 128 // OLED display width, in pixels
-#define SCREEN_HEIGHT 64 // OLED display height, in pixels
-#define X_AXIS_START 18 // X-axis starting position
-
 // ***** LCD MESSAGES *****
 const char* lcdMessagesReflowStatus[] = {
   "TinyReflow",
@@ -257,7 +195,6 @@ const char* lcdMessagesReflowStatus[] = {
 // MAX38156(SPI):   4=SCK, 5=SDO, 6=SDI, CS=7
 // SSD1306(I2C):    8=SDA, 9=SCL
 unsigned char ssrPin = 0;
-//unsigned char ssr2Pin = 1;
 unsigned char ledPin = 2;
 unsigned char switchLfPbPin = 7;
 unsigned char switchStartStopPin = 10;
@@ -288,6 +225,7 @@ reflowState_t reflowState;
 reflowStatus_t reflowStatus;
 // Reflow profile type
 reflowProfile_t reflowProfile;
+
 // Switch debounce state machine state variable
 debounceState_t debounceState;
 // Switch debounce timer
@@ -296,8 +234,10 @@ long lastDebounceTime;
 switch_t switchStatus;
 switch_t switchValue;
 switch_t switchMask;
+
 // Seconds timer
 unsigned int timerSeconds;
+
 // Thermocouple fault status
 unsigned char fault;
 unsigned int timerUpdate;
@@ -319,19 +259,36 @@ Adafruit_MAX31856 thermocouple = Adafruit_MAX31856(thermocoupleCSPin);
 #endif
 
 
+#ifdef ARDUINO_USB_MODE
+#if !ARDUINO_USB_CDC_ON_BOOT
+HWCDC HWCDCSerial;
+#endif
+// Print on both USB CDC serial and UART
+// https://github.com/tmk/WIP/wiki/ESP32#serial
+#define serial_begin(baud)     do { Serial0.begin(baud);    HWCDCSerial.begin(); HWCDCSerial.setTxTimeoutMs(0); } while (0)
+#define serial_print(...)      do { Serial0.print(__VA_ARGS__);   HWCDCSerial.print(__VA_ARGS__);   } while (0)
+#define serial_println(...)    do { Serial0.println(__VA_ARGS__); HWCDCSerial.println(__VA_ARGS__); } while (0)
+#define serial_printf(...)     do { Serial0.printf(__VA_ARGS__);  HWCDCSerial.printf(__VA_ARGS__);  } while (0)
+#else
+#define serial_begin(baud)     Serial.begin(baud)
+#define serial_print(...)      Serial.print(__VA_ARGS__)
+#define serial_println(...)    Serial.println(__VA_ARGS__)
+#define serial_printf(...)     Serial.printf(__VA_ARGS__)
+#endif
+
+
 // U8g2 Fonts
 // https://github.com/olikraus/u8g2/wiki/fntlist8#7-pixel-height
 // u8g2_font_6x10_mr        // 5x7 and spacing:1    monospace
-
 // https://github.com/olikraus/u8g2/wiki/fntgrpprofont#profont17
 // u8g2_font_profont17_tf   // 9x17? ascent=11 descent=-3 strWith("A")=8
 // u8g2_font_profont17_mf   // 9x17? ascent=11 descent=-3 strWith("A")=9 monospace
-
 #define FONT_HEIGHT(mergin)     (oled.getAscent() - oled.getDescent() + (mergin))
 // Font line: top=0, bottom=-1
 #define LINE(l, mergin)         (((l) < 0 ? SCREEN_HEIGHT : 0) + FONT_HEIGHT(mergin) * (l) + oled.getAscent())
 // Font column form right edge
 #define FCR(str)     (SCREEN_WIDTH - oled.getStrWidth(str))
+
 
 static void drawStrInverted(u8g2_uint_t x, u8g2_uint_t y, const char *s)
 {
@@ -821,6 +778,33 @@ serial_printf("%lf %lf %lf\r\n", reflowOvenPID.GetKp(), reflowOvenPID.GetKi(), r
       tone(buzzerPin, 1000, 200);
     }
   }
+
+  // PID computation and SSR control
+  if (reflowStatus == REFLOW_STATUS_ON)
+  {
+    now = millis();
+
+    reflowOvenPID.Compute();
+
+    if ((now - windowStartTime) > windowSize)
+    {
+      // Time to shift the Relay Window
+      windowStartTime += windowSize;
+    }
+    if (output > (now - windowStartTime)) digitalWrite(ssrPin, HIGH);
+    else digitalWrite(ssrPin, LOW);
+  }
+  // Reflow oven process is off, ensure oven is off
+  else
+  {
+    digitalWrite(ssrPin, LOW);
+  }
+
+  checkSwitch();
+}
+
+void checkSwitch(void)
+{
   // Switch status has been read
   switchStatus = SWITCH_NONE;
 
@@ -874,27 +858,6 @@ serial_printf("%lf %lf %lf\r\n", reflowOvenPID.GetKp(), reflowOvenPID.GetKi(), r
         debounceState = DEBOUNCE_STATE_IDLE;
       }
       break;
-  }
-
-  // PID computation and SSR control
-  if (reflowStatus == REFLOW_STATUS_ON)
-  {
-    now = millis();
-
-    reflowOvenPID.Compute();
-
-    if ((now - windowStartTime) > windowSize)
-    {
-      // Time to shift the Relay Window
-      windowStartTime += windowSize;
-    }
-    if (output > (now - windowStartTime)) digitalWrite(ssrPin, HIGH);
-    else digitalWrite(ssrPin, LOW);
-  }
-  // Reflow oven process is off, ensure oven is off
-  else
-  {
-    digitalWrite(ssrPin, LOW);
   }
 }
 
