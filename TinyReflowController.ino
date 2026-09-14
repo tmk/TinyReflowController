@@ -198,22 +198,22 @@ typedef enum REFLOW_PROFILE
 // ***** GENERAL PROFILE CONSTANTS *****
 #define PROFILE_TYPE_ADDRESS 0
 #define TEMPERATURE_ROOM 50
-#define TEMPERATURE_SOAK_MIN 150
 #define TEMPERATURE_COOL_MIN 100
 #define SENSOR_SAMPLING_TIME 1000
-#define SOAK_TEMPERATURE_STEP 5
 
 // ***** LEAD FREE PROFILE CONSTANTS *****
 #define TEMPERATURE_SOAK_MIN_LF 150
-#define TEMPERATURE_SOAK_MAX_LF 200
+#define TEMPERATURE_SOAK_MAX_LF 175
 #define TEMPERATURE_REFLOW_MAX_LF 249
-#define SOAK_MICRO_PERIOD_LF 9000
+#define SOAK_STEP_TEMP_LF 1.4
+#define SOAK_STEP_PERIOD_LF 5000
 
 // ***** LEADED PROFILE CONSTANTS *****
 #define TEMPERATURE_SOAK_MIN_PB 100
 #define TEMPERATURE_SOAK_MAX_PB 150
 #define TEMPERATURE_REFLOW_MAX_PB 235
-#define SOAK_MICRO_PERIOD_PB 10000
+#define SOAK_STEP_TEMP_PB 2.8
+#define SOAK_STEP_PERIOD_PB 5000
 
 // ***** SWITCH SPECIFIC CONSTANTS *****
 #define DEBOUNCE_PERIOD_MIN 100
@@ -232,8 +232,8 @@ typedef enum REFLOW_PROFILE
 #define PID_KD_SOAK 250
 // ***** REFLOW STAGE *****
 #define PID_KP_REFLOW 300
-#define PID_KI_REFLOW 0.05
-#define PID_KD_REFLOW 350
+#define PID_KI_REFLOW 0
+#define PID_KD_REFLOW 950
 #define PID_SAMPLE_TIME 1000
 
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
@@ -277,9 +277,11 @@ unsigned long nextCheck;
 unsigned long nextRead;
 unsigned long updateLcd;
 unsigned long timerSoak;
+unsigned char soakTemperatureMin;
 unsigned char soakTemperatureMax;
 unsigned char reflowTemperatureMax;
-unsigned long soakMicroPeriod;
+double soakStepTemp;
+unsigned long soakStepPeriod;
 // Reflow oven controller state machine state variable
 reflowState_t reflowState;
 // Reflow oven controller status
@@ -630,30 +632,36 @@ void loop()
 
           // Initialize PID control window starting time
           windowStartTime = millis();
-          // Ramp up to minimum soaking temperature
-          setpoint = TEMPERATURE_SOAK_MIN;
           // Load profile specific constant
           if (reflowProfile == REFLOW_PROFILE_LEADFREE)
           {
+            soakTemperatureMin = TEMPERATURE_SOAK_MIN_LF;
             soakTemperatureMax = TEMPERATURE_SOAK_MAX_LF;
             reflowTemperatureMax = TEMPERATURE_REFLOW_MAX_LF;
-            soakMicroPeriod = SOAK_MICRO_PERIOD_LF;
+            soakStepTemp = SOAK_STEP_TEMP_LF;
+            soakStepPeriod = SOAK_STEP_PERIOD_LF;
           }
           else
           {
+            soakTemperatureMin = TEMPERATURE_SOAK_MIN_PB;
             soakTemperatureMax = TEMPERATURE_SOAK_MAX_PB;
             reflowTemperatureMax = TEMPERATURE_REFLOW_MAX_PB;
-            soakMicroPeriod = SOAK_MICRO_PERIOD_PB;
+            soakStepTemp = SOAK_STEP_TEMP_PB;
+            soakStepPeriod = SOAK_STEP_PERIOD_PB;
           }
+          // Ramp up to minimum soaking temperature
+          setpoint = soakTemperatureMin;
           // Tell the PID to range between 0 and the full window size
           reflowOvenPID.SetOutputLimits(0, windowSize);
           reflowOvenPID.SetSampleTime(PID_SAMPLE_TIME);
+          reflowOvenPID.SetTunings(PID_KP_PREHEAT, PID_KI_PREHEAT, PID_KD_PREHEAT);
           // Turn the PID on
           reflowOvenPID.SetMode(AUTOMATIC);
           // Proceed to preheat stage
           reflowState = REFLOW_STATE_PREHEAT;
           // Start reflow
           tone(buzzerPin, 3000, 1000);
+serial_printf("%lf %lf %lf\r\n", reflowOvenPID.GetKp(), reflowOvenPID.GetKi(), reflowOvenPID.GetKd());
         }
       }
       break;
@@ -661,18 +669,19 @@ void loop()
     case REFLOW_STATE_PREHEAT:
       reflowStatus = REFLOW_STATUS_ON;
       // If minimum soak temperature is achieve
-      if (input >= TEMPERATURE_SOAK_MIN)
+      if (input >= soakTemperatureMin)
       {
         // PREHEAT -> SOAK
         // Chop soaking period into smaller sub-period
-        timerSoak = millis() + soakMicroPeriod;
+        timerSoak = millis() + soakStepPeriod;
         // Set less agressive PID parameters for soaking ramp
         reflowOvenPID.SetTunings(PID_KP_SOAK, PID_KI_SOAK, PID_KD_SOAK);
         // Ramp up to first section of soaking temperature
-        setpoint = TEMPERATURE_SOAK_MIN + SOAK_TEMPERATURE_STEP;
+        setpoint = soakTemperatureMin + soakStepTemp;
         // Proceed to soaking state
         reflowState = REFLOW_STATE_SOAK;
         tone(buzzerPin, 3000, 100);
+serial_printf("%lf %lf %lf\r\n", reflowOvenPID.GetKp(), reflowOvenPID.GetKi(), reflowOvenPID.GetKd());
       }
       break;
 
@@ -680,20 +689,20 @@ void loop()
       // If micro soak temperature is achieved
       if (millis() > timerSoak)
       {
-        timerSoak = millis() + soakMicroPeriod;
-        // Increment micro setpoint
-        setpoint += SOAK_TEMPERATURE_STEP;
-        if (setpoint > soakTemperatureMax)
-        {
-          // SOAK -> REFLOW
-          // Set agressive PID parameters for reflow ramp
-          reflowOvenPID.SetTunings(PID_KP_REFLOW, PID_KI_REFLOW, PID_KD_REFLOW);
-          // Ramp up to first section of soaking temperature
-          setpoint = reflowTemperatureMax;
-          // Proceed to reflowing state
-          reflowState = REFLOW_STATE_REFLOW;
-          tone(buzzerPin, 3000, 100);
-        }
+        timerSoak = millis() + soakStepPeriod;
+        setpoint += soakStepTemp;
+      }
+      if (input >= soakTemperatureMax && setpoint >= soakTemperatureMax)
+      {
+        // SOAK -> REFLOW
+        // Set agressive PID parameters for reflow ramp
+        reflowOvenPID.SetTunings(PID_KP_REFLOW, PID_KI_REFLOW, PID_KD_REFLOW);
+        // Ramp up to first section of soaking temperature
+        setpoint = reflowTemperatureMax;
+        // Proceed to reflowing state
+        reflowState = REFLOW_STATE_REFLOW;
+        tone(buzzerPin, 3000, 100);
+serial_printf("%lf %lf %lf\r\n", reflowOvenPID.GetKp(), reflowOvenPID.GetKi(), reflowOvenPID.GetKd());
       }
       break;
 
@@ -703,6 +712,7 @@ void loop()
       if (input >= (reflowTemperatureMax - 5))
       {
         // REFLOW -> COOL
+        // TODO: cooling
         // Set PID parameters for cooling ramp
         reflowOvenPID.SetTunings(PID_KP_REFLOW, PID_KI_REFLOW, PID_KD_REFLOW);
         // Ramp down to minimum cooling temperature
@@ -710,6 +720,7 @@ void loop()
         // Proceed to cooling state
         reflowState = REFLOW_STATE_COOL;
         tone(buzzerPin, 3000, 1000);
+serial_printf("%lf %lf %lf\r\n", reflowOvenPID.GetKp(), reflowOvenPID.GetKi(), reflowOvenPID.GetKd());
       }
       break;
 
