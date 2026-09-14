@@ -107,7 +107,6 @@
 #define PROFILE_TYPE_ADDRESS 0
 #define TEMPERATURE_ROOM 50
 #define TEMPERATURE_COOL_MIN 100
-#define SENSOR_SAMPLING_TIME 1000
 
 
 // ***** LEAD FREE PROFILE CONSTANTS *****
@@ -158,20 +157,6 @@ typedef enum REFLOW_STATUS
   REFLOW_STATUS_ON
 } reflowStatus_t;
 
-typedef enum SWITCH
-{
-  SWITCH_NONE,
-  SWITCH_1,
-  SWITCH_2
-} switch_t;
-
-typedef enum DEBOUNCE_STATE
-{
-  DEBOUNCE_STATE_IDLE,
-  DEBOUNCE_STATE_CHECK,
-  DEBOUNCE_STATE_RELEASE
-} debounceState_t;
-
 typedef enum REFLOW_PROFILE
 {
   REFLOW_PROFILE_LEADFREE,
@@ -204,14 +189,8 @@ unsigned char buzzerPin = 6;
 double setpoint;
 double input;
 double output;
-double kp = PID_KP_PREHEAT;
-double ki = PID_KI_PREHEAT;
-double kd = PID_KD_PREHEAT;
 int windowSize;
 unsigned long windowStartTime;
-unsigned long nextCheck;
-unsigned long nextRead;
-unsigned long updateLcd;
 unsigned long timerSoak;
 unsigned char soakTemperatureMin;
 unsigned char soakTemperatureMax;
@@ -225,15 +204,6 @@ reflowStatus_t reflowStatus;
 // Reflow profile type
 reflowProfile_t reflowProfile;
 
-// Switch debounce state machine state variable
-debounceState_t debounceState;
-// Switch debounce timer
-long lastDebounceTime;
-// Switch press status
-switch_t switchStatus;
-switch_t switchValue;
-switch_t switchMask;
-
 // Seconds timer
 unsigned int timerSeconds;
 
@@ -243,9 +213,18 @@ unsigned int timerUpdate;
 unsigned char temperature[SCREEN_WIDTH - X_AXIS_START];
 unsigned char x;
 
+// Switch press status
+typedef enum
+{
+  SWITCH_NONE,
+  SWITCH_1,
+  SWITCH_2
+} switch_t;
+switch_t switchStatus;
+
 
 // PID control interface
-PID reflowOvenPID(&input, &output, &setpoint, kp, ki, kd, DIRECT);
+PID reflowOvenPID(&input, &output, &setpoint, PID_KP_PREHEAT, PID_KI_PREHEAT, PID_KD_PREHEAT, DIRECT);
 
 // LCD interface
 U8G2_SSD1306_128X64_NONAME_F_HW_I2C oled(U8G2_R0, /* reset=*/ U8X8_PIN_NONE);
@@ -358,73 +337,26 @@ void setup()
 
   // Set window size
   windowSize = 2000;
-  // Initialize time keeping variable
-  nextCheck = millis();
-  // Initialize thermocouple reading variable
-  nextRead = millis();
-  // Initialize LCD update timer
-  updateLcd = millis();
 }
 
 void loop()
 {
-  // Current time
-  unsigned long now;
-
-  // Thermocouple
+  // every 1000ms
+  static unsigned long nextRead = millis();
   if (millis() > nextRead)
   {
     // Read thermocouple next sampling period
-    nextRead += SENSOR_SAMPLING_TIME;
+    nextRead += 1000;
 
-    // Read current temperature
-#if defined(USE_MAX31855)
-    input = thermocouple.readCelsius();
-#else
-    input = thermocouple.readThermocoupleTemperature();
-#endif
-
-    // Check for thermocouple fault
-#if defined(USE_MAX31855)
-    fault = thermocouple.readError();
-#else
-    fault = thermocouple.readFault();
-#endif
-
-    // If any thermocouple fault is detected
-#if defined(USE_MAX31855)
-    if ((fault & MAX31855_FAULT_OPEN) ||
-        (fault & MAX31855_FAULT_SHORT_GND) ||
-        (fault & MAX31855_FAULT_SHORT_VCC))
-#else
-    if ((fault & MAX31856_FAULT_CJRANGE) ||
-        (fault & MAX31856_FAULT_TCRANGE) ||
-        (fault & MAX31856_FAULT_CJHIGH) ||
-        (fault & MAX31856_FAULT_CJLOW) ||
-        (fault & MAX31856_FAULT_TCHIGH) ||
-        (fault & MAX31856_FAULT_TCLOW) ||
-        (fault & MAX31856_FAULT_OVUV) ||
-        (fault & MAX31856_FAULT_OPEN))
-#endif
-    {
-      // Illegal operation
-      reflowState = REFLOW_STATE_ERROR;
-      reflowStatus = REFLOW_STATUS_OFF;
-      serial_println(F("Error"));
-    }
-  }
-
-  if (millis() > nextCheck)
-  {
-    // Check input in the next seconds
-    nextCheck += SENSOR_SAMPLING_TIME;
+    readThermocouple();
 
     // If reflow process is on going
     if (reflowStatus == REFLOW_STATUS_ON)
     {
       // Increase seconds timer for reflow curve plot
       timerSeconds++;
-      // Send temperature and time stamp to serial
+
+      // Send data
       serial_print(timerSeconds);
       serial_print(F(","));
       serial_print(input);
@@ -435,116 +367,6 @@ void loop()
       serial_print(F(","));
       serial_println(lcdMessagesReflowStatus[reflowState]);
     }
-    else
-    {
-      serial_print(input);
-      serial_print(F(","));
-#if defined(USE_MAX31855)
-      serial_println(thermocouple.readInternal());
-#else
-      serial_println(thermocouple.readCJTemperature());
-#endif
-    }
-  }
-
-  if (millis() > updateLcd)
-  {
-    // Update LCD in the next 100 ms
-    updateLcd += UPDATE_RATE;
-
-    oled.clearBuffer();
-    // Reflow state: top left
-    oled.setFont(u8g2_font_profont17_mf);
-    if (digitalRead(ssrPin) == HIGH) {
-        drawStrInverted(0, LINE(0,2), lcdMessagesReflowStatus[reflowState]);
-    } else {
-        oled.drawStr(0, LINE(0,2), lcdMessagesReflowStatus[reflowState]);
-    }
-
-    // Lead Free / Pb: top right
-    oled.setFont(u8g2_font_6x10_mr);    // 5x7 and spacing:1
-    oled.setCursor(FCR("XX"), LINE(0, 1));
-    if (reflowProfile == REFLOW_PROFILE_LEADFREE)
-    {
-      oled.print(F("LF"));
-    }
-    else
-    {
-      oled.print(F("PB"));
-    }
-
-    // Temperature markers
-    oled.setFont(u8g2_font_6x10_mr);
-    oled.setCursor(0, 26);
-    oled.print(F("250"));
-    oled.setCursor(0, 44);
-    oled.print(F("150"));
-    oled.setCursor(6, 62);
-    oled.print(F("50"));
-    // Draw temperature and time axis
-    oled.drawLine(18, 18, 18, 63);
-    oled.drawLine(18, 63, 127, 63);
-
-
-    // If currently in error state
-    if (reflowState == REFLOW_STATE_ERROR)
-    {
-      oled.setFont(u8g2_font_6x10_mr);
-      oled.setCursor(80, LINE(1, 1));
-      oled.print(F("TC Error"));
-    }
-    else
-    {
-      // Temperature: bottom right
-      oled.setFont(u8g2_font_profont17_mf);
-      if      (input <= -100) oled.setCursor(FCR("-999.99\260C"), LINE(-1, 1));
-      else if (input <= -10)  oled.setCursor(FCR("-99.99\260C"),  LINE(-1, 1));
-      else if (input < 0)     oled.setCursor(FCR("-9.99\260C"),   LINE(-1, 1));
-      else if (input < 10)    oled.setCursor(FCR("9.99\260C"),    LINE(-1, 1));
-      else if (input < 100)   oled.setCursor(FCR("99.99\260C"),   LINE(-1, 1));
-      else if (input < 1000)  oled.setCursor(FCR("999.99\260C"),  LINE(-1, 1));
-      else                    oled.setCursor(FCR("9999.99\260C"), LINE(-1, 1));
-      oled.print(input);
-      oled.setCursor(FCR("\260C"), LINE(-1, 1));
-      oled.print(F("\260C"));   // degree Celsius
-    }
-
-    // Elapsed time
-    oled.setFont(u8g2_font_profont17_mf);
-    if      (timerSeconds < 10)   oled.setCursor(FCR("9sec"),    LINE(-2, 1));
-    else if (timerSeconds < 100)  oled.setCursor(FCR("99sec"),   LINE(-2, 1));
-    else if (timerSeconds < 1000) oled.setCursor(FCR("999sec"),  LINE(-2, 1));
-    else                          oled.setCursor(FCR("9999sec"), LINE(-2, 1));
-    oled.print(timerSeconds);
-    oled.setCursor(FCR("sec"), LINE(-2, 1));
-    oled.print(F("sec"));
-
-    if (reflowStatus == REFLOW_STATUS_ON)
-    {
-      // We are updating the display faster than sensor reading
-      if (timerSeconds > timerUpdate)
-      {
-        // Store temperature reading every 5 s
-        if ((timerSeconds % 5) == 0 && (x > 0 || input > 50))
-        {
-          timerUpdate = timerSeconds;
-          unsigned char averageReading = map(input, 50, 250, 63, 19);
-          if (x < (SCREEN_WIDTH - X_AXIS_START))
-          {
-            temperature[x++] = averageReading;
-          }
-        }
-      }
-    }
-
-    unsigned char timeAxis;
-    for (timeAxis = 0; timeAxis < x; timeAxis++)
-    {
-      oled.drawPixel(timeAxis + X_AXIS_START, temperature[timeAxis]);
-    }
-
-    // Update screen
-    oled.sendBuffer();
   }
 
   // Reflow oven controller state machine
@@ -562,9 +384,10 @@ void loop()
         if (switchStatus == SWITCH_1)
         {
           // START: IDLE -> PREHEAT
-          // Send header for CSV file
+          // Send header for data
           serial_println(F("TinyReflowController build at " __DATE__ " " __TIME__));
           serial_println(F("Time,Input,Setpoint,Output,State"));
+
           // Intialize seconds timer for serial debug information
           timerSeconds = 0;
 
@@ -580,6 +403,7 @@ void loop()
 
           // Initialize PID control window starting time
           windowStartTime = millis();
+
           // Load profile specific constant
           if (reflowProfile == REFLOW_PROFILE_LEADFREE)
           {
@@ -597,6 +421,7 @@ void loop()
             soakStepTemp = SOAK_STEP_TEMP_PB;
             soakStepPeriod = SOAK_STEP_PERIOD_PB;
           }
+
           // Ramp up to minimum soaking temperature
           setpoint = soakTemperatureMin;
           // Tell the PID to range between 0 and the full window size
@@ -609,7 +434,6 @@ void loop()
           reflowState = REFLOW_STATE_PREHEAT;
           // Start reflow
           tone(buzzerPin, 3000, 1000);
-serial_printf("%lf %lf %lf\r\n", reflowOvenPID.GetKp(), reflowOvenPID.GetKi(), reflowOvenPID.GetKd());
         }
       }
       break;
@@ -629,7 +453,6 @@ serial_printf("%lf %lf %lf\r\n", reflowOvenPID.GetKp(), reflowOvenPID.GetKi(), r
         // Proceed to soaking state
         reflowState = REFLOW_STATE_SOAK;
         tone(buzzerPin, 3000, 100);
-serial_printf("%lf %lf %lf\r\n", reflowOvenPID.GetKp(), reflowOvenPID.GetKi(), reflowOvenPID.GetKd());
       }
       break;
 
@@ -650,7 +473,6 @@ serial_printf("%lf %lf %lf\r\n", reflowOvenPID.GetKp(), reflowOvenPID.GetKi(), r
         // Proceed to reflowing state
         reflowState = REFLOW_STATE_REFLOW;
         tone(buzzerPin, 3000, 100);
-serial_printf("%lf %lf %lf\r\n", reflowOvenPID.GetKp(), reflowOvenPID.GetKi(), reflowOvenPID.GetKd());
       }
       break;
 
@@ -668,7 +490,6 @@ serial_printf("%lf %lf %lf\r\n", reflowOvenPID.GetKp(), reflowOvenPID.GetKi(), r
         // Proceed to cooling state
         reflowState = REFLOW_STATE_COOL;
         tone(buzzerPin, 3000, 1000);
-serial_printf("%lf %lf %lf\r\n", reflowOvenPID.GetKp(), reflowOvenPID.GetKi(), reflowOvenPID.GetKd());
       }
       break;
 
@@ -773,29 +594,197 @@ serial_printf("%lf %lf %lf\r\n", reflowOvenPID.GetKp(), reflowOvenPID.GetKi(), r
   // PID computation and SSR control
   if (reflowStatus == REFLOW_STATUS_ON)
   {
-    now = millis();
+    unsigned long now = millis();
 
     reflowOvenPID.Compute();
 
     if ((now - windowStartTime) > windowSize)
     {
-      // Time to shift the Relay Window
       windowStartTime += windowSize;
     }
-    if (output > (now - windowStartTime)) digitalWrite(ssrPin, HIGH);
-    else digitalWrite(ssrPin, LOW);
+
+    if (output > (now - windowStartTime))
+    {
+      // heater is on
+      digitalWrite(ssrPin, HIGH);
+    }
+    else
+    {
+      // heater is off
+      digitalWrite(ssrPin, LOW);
+    }
   }
-  // Reflow oven process is off, ensure oven is off
   else
   {
+    // ensure heater is off
     digitalWrite(ssrPin, LOW);
   }
+
+  updateDisplay();
 
   checkSwitch();
 }
 
+
+void readThermocouple(void)
+{
+    // Read current temperature
+#if defined(USE_MAX31855)
+    input = thermocouple.readCelsius();
+#else
+    input = thermocouple.readThermocoupleTemperature();
+#endif
+
+    // Check for thermocouple fault
+#if defined(USE_MAX31855)
+    fault = thermocouple.readError();
+#else
+    fault = thermocouple.readFault();
+#endif
+
+    // If any thermocouple fault is detected
+#if defined(USE_MAX31855)
+    if ((fault & MAX31855_FAULT_OPEN) ||
+        (fault & MAX31855_FAULT_SHORT_GND) ||
+        (fault & MAX31855_FAULT_SHORT_VCC))
+#else
+    if ((fault & MAX31856_FAULT_CJRANGE) ||
+        (fault & MAX31856_FAULT_TCRANGE) ||
+        (fault & MAX31856_FAULT_CJHIGH) ||
+        (fault & MAX31856_FAULT_CJLOW) ||
+        (fault & MAX31856_FAULT_TCHIGH) ||
+        (fault & MAX31856_FAULT_TCLOW) ||
+        (fault & MAX31856_FAULT_OVUV) ||
+        (fault & MAX31856_FAULT_OPEN))
+#endif
+    {
+      // Illegal operation
+      reflowState = REFLOW_STATE_ERROR;
+      reflowStatus = REFLOW_STATUS_OFF;
+      serial_println(F("Error"));
+    }
+}
+
+void updateDisplay(void)
+{
+  static unsigned long updateLcd = millis();
+
+  if (millis() > updateLcd)
+  {
+    // Update LCD in the next 100 ms
+    updateLcd += UPDATE_RATE;
+
+    oled.clearBuffer();
+    // Reflow state: top left
+    oled.setFont(u8g2_font_profont17_mf);
+    if (digitalRead(ssrPin) == HIGH) {
+        drawStrInverted(0, LINE(0,2), lcdMessagesReflowStatus[reflowState]);
+    } else {
+        oled.drawStr(0, LINE(0,2), lcdMessagesReflowStatus[reflowState]);
+    }
+
+    // Lead Free / Pb: top right
+    oled.setFont(u8g2_font_6x10_mr);    // 5x7 and spacing:1
+    oled.setCursor(FCR("XX"), LINE(0, 1));
+    if (reflowProfile == REFLOW_PROFILE_LEADFREE)
+    {
+      oled.print(F("LF"));
+    }
+    else
+    {
+      oled.print(F("PB"));
+    }
+
+    // Temperature markers
+    oled.setFont(u8g2_font_6x10_mr);
+    oled.setCursor(0, 26);
+    oled.print(F("250"));
+    oled.setCursor(0, 44);
+    oled.print(F("150"));
+    oled.setCursor(6, 62);
+    oled.print(F("50"));
+    // Draw temperature and time axis
+    oled.drawLine(18, 18, 18, 63);
+    oled.drawLine(18, 63, 127, 63);
+
+
+    // If currently in error state
+    if (reflowState == REFLOW_STATE_ERROR)
+    {
+      oled.setFont(u8g2_font_6x10_mr);
+      oled.setCursor(80, LINE(1, 1));
+      oled.print(F("TC Error"));
+    }
+    else
+    {
+      // Temperature: bottom right
+      oled.setFont(u8g2_font_profont17_mf);
+      if      (input <= -100) oled.setCursor(FCR("-999.99\260C"), LINE(-1, 1));
+      else if (input <= -10)  oled.setCursor(FCR("-99.99\260C"),  LINE(-1, 1));
+      else if (input < 0)     oled.setCursor(FCR("-9.99\260C"),   LINE(-1, 1));
+      else if (input < 10)    oled.setCursor(FCR("9.99\260C"),    LINE(-1, 1));
+      else if (input < 100)   oled.setCursor(FCR("99.99\260C"),   LINE(-1, 1));
+      else if (input < 1000)  oled.setCursor(FCR("999.99\260C"),  LINE(-1, 1));
+      else                    oled.setCursor(FCR("9999.99\260C"), LINE(-1, 1));
+      oled.print(input);
+      oled.setCursor(FCR("\260C"), LINE(-1, 1));
+      oled.print(F("\260C"));   // degree Celsius
+    }
+
+    // Elapsed time
+    oled.setFont(u8g2_font_profont17_mf);
+    if      (timerSeconds < 10)   oled.setCursor(FCR("9sec"),    LINE(-2, 1));
+    else if (timerSeconds < 100)  oled.setCursor(FCR("99sec"),   LINE(-2, 1));
+    else if (timerSeconds < 1000) oled.setCursor(FCR("999sec"),  LINE(-2, 1));
+    else                          oled.setCursor(FCR("9999sec"), LINE(-2, 1));
+    oled.print(timerSeconds);
+    oled.setCursor(FCR("sec"), LINE(-2, 1));
+    oled.print(F("sec"));
+
+    if (reflowStatus == REFLOW_STATUS_ON)
+    {
+      // We are updating the display faster than sensor reading
+      if (timerSeconds > timerUpdate)
+      {
+        // Store temperature reading every 5 s
+        if ((timerSeconds % 5) == 0 && (x > 0 || input > 50))
+        {
+          timerUpdate = timerSeconds;
+          unsigned char averageReading = map(input, 50, 250, 63, 19);
+          if (x < (SCREEN_WIDTH - X_AXIS_START))
+          {
+            temperature[x++] = averageReading;
+          }
+        }
+      }
+    }
+
+    unsigned char timeAxis;
+    for (timeAxis = 0; timeAxis < x; timeAxis++)
+    {
+      oled.drawPixel(timeAxis + X_AXIS_START, temperature[timeAxis]);
+    }
+
+    // Update screen
+    oled.sendBuffer();
+  }
+}
+
+
 void checkSwitch(void)
 {
+  // Switch debounce state machine state variable
+  static enum
+  {
+    DEBOUNCE_STATE_IDLE,
+    DEBOUNCE_STATE_CHECK,
+    DEBOUNCE_STATE_RELEASE
+  } debounceState = DEBOUNCE_STATE_IDLE;
+
+  static switch_t switchValue;
+  static switch_t switchMask;
+  static long lastDebounceTime;
+
   // Switch status has been read
   switchStatus = SWITCH_NONE;
 
@@ -825,7 +814,7 @@ void checkSwitch(void)
       if (switchValue == switchMask)
       {
         // If minimum debounce period is completed
-        if ((millis() - lastDebounceTime) > (switchMask == SWITCH_1 ? 1500 : DEBOUNCE_PERIOD_MIN))
+        if ((millis() - lastDebounceTime) > (switchMask == SWITCH_1 ? 1000 : DEBOUNCE_PERIOD_MIN))
         {
           // Valid switch press
           switchStatus = switchMask;
