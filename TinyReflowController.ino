@@ -132,7 +132,7 @@
 #define UPDATE_RATE 100
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
 #define SCREEN_HEIGHT 64 // OLED display height, in pixels
-#define X_AXIS_START 18 // X-axis starting position
+#define X_AXIS_START 0 // X-axis starting position
 
 
 // Thermocouple
@@ -337,6 +337,8 @@ void setup()
 
   // Set window size
   windowSize = 2000;
+
+  serial_println(F("TinyReflowController build at " __DATE__ " " __TIME__));
 }
 
 void loop()
@@ -394,6 +396,7 @@ void loop()
           // Initialize reflow plot update timer
           timerUpdate = 0;
 
+          // clear temperature graph data
           for (x = 0; x < (SCREEN_WIDTH - X_AXIS_START); x++)
           {
             temperature[x] = 0;
@@ -661,7 +664,7 @@ void readThermocouple(void)
       // Illegal operation
       reflowState = REFLOW_STATE_ERROR;
       reflowStatus = REFLOW_STATUS_OFF;
-      serial_println(F("Error"));
+      serial_println(F("TC Error"));
     }
 }
 
@@ -678,9 +681,9 @@ void updateDisplay(void)
     // Reflow state: top left
     oled.setFont(u8g2_font_profont17_mf);
     if (digitalRead(ssrPin) == HIGH) {
-        drawStrInverted(0, LINE(0,2), lcdMessagesReflowStatus[reflowState]);
+        drawStrInverted(4, LINE(0,2), lcdMessagesReflowStatus[reflowState]);
     } else {
-        oled.drawStr(0, LINE(0,2), lcdMessagesReflowStatus[reflowState]);
+        oled.drawStr(4, LINE(0,2), lcdMessagesReflowStatus[reflowState]);
     }
 
     // Lead Free / Pb: top right
@@ -695,62 +698,52 @@ void updateDisplay(void)
       oled.print(F("PB"));
     }
 
-    // Temperature markers
-    oled.setFont(u8g2_font_6x10_mr);
-    oled.setCursor(0, 26);
-    oled.print(F("250"));
-    oled.setCursor(0, 44);
-    oled.print(F("150"));
-    oled.setCursor(6, 62);
-    oled.print(F("50"));
-    // Draw temperature and time axis
-    oled.drawLine(18, 18, 18, 63);
-    oled.drawLine(18, 63, 127, 63);
 
-
-    // If currently in error state
+    // Temperature
     if (reflowState == REFLOW_STATE_ERROR)
     {
-      oled.setFont(u8g2_font_6x10_mr);
-      oled.setCursor(80, LINE(1, 1));
+      // currently in error state
+      oled.setFont(u8g2_font_profont17_mf);
+      oled.setCursor(FCR("TC Error"), LINE(-1, 1)-8);
       oled.print(F("TC Error"));
     }
     else
     {
       // Temperature: bottom right
       oled.setFont(u8g2_font_profont17_mf);
-      if      (input <= -100) oled.setCursor(FCR("-999.99\260C"), LINE(-1, 1));
-      else if (input <= -10)  oled.setCursor(FCR("-99.99\260C"),  LINE(-1, 1));
-      else if (input < 0)     oled.setCursor(FCR("-9.99\260C"),   LINE(-1, 1));
-      else if (input < 10)    oled.setCursor(FCR("9.99\260C"),    LINE(-1, 1));
-      else if (input < 100)   oled.setCursor(FCR("99.99\260C"),   LINE(-1, 1));
-      else if (input < 1000)  oled.setCursor(FCR("999.99\260C"),  LINE(-1, 1));
-      else                    oled.setCursor(FCR("9999.99\260C"), LINE(-1, 1));
+      if      (input <= -100) oled.setCursor(FCR("-999.99\260C"), LINE(-1, 1)-8);
+      else if (input <= -10)  oled.setCursor(FCR("-99.99\260C"),  LINE(-1, 1)-8);
+      else if (input < 0)     oled.setCursor(FCR("-9.99\260C"),   LINE(-1, 1)-8);
+      else if (input < 10)    oled.setCursor(FCR("9.99\260C"),    LINE(-1, 1)-8);
+      else if (input < 100)   oled.setCursor(FCR("99.99\260C"),   LINE(-1, 1)-8);
+      else if (input < 1000)  oled.setCursor(FCR("999.99\260C"),  LINE(-1, 1)-8);
+      else                    oled.setCursor(FCR("9999.99\260C"), LINE(-1, 1)-8);
       oled.print(input);
-      oled.setCursor(FCR("\260C"), LINE(-1, 1));
+      oled.setCursor(FCR("\260C"), LINE(-1, 1)-8);
       oled.print(F("\260C"));   // degree Celsius
     }
 
     // Elapsed time
     oled.setFont(u8g2_font_profont17_mf);
-    if      (timerSeconds < 10)   oled.setCursor(FCR("9sec"),    LINE(-2, 1));
-    else if (timerSeconds < 100)  oled.setCursor(FCR("99sec"),   LINE(-2, 1));
-    else if (timerSeconds < 1000) oled.setCursor(FCR("999sec"),  LINE(-2, 1));
-    else                          oled.setCursor(FCR("9999sec"), LINE(-2, 1));
+    if      (timerSeconds < 10)   oled.setCursor(FCR("9s"),    LINE(-2, 1)-8);
+    else if (timerSeconds < 100)  oled.setCursor(FCR("99s"),   LINE(-2, 1)-8);
+    else if (timerSeconds < 1000) oled.setCursor(FCR("999s"),  LINE(-2, 1)-8);
+    else                          oled.setCursor(FCR("9999s"), LINE(-2, 1)-8);
     oled.print(timerSeconds);
-    oled.setCursor(FCR("sec"), LINE(-2, 1));
-    oled.print(F("sec"));
+    oled.setCursor(FCR("s"), LINE(-2, 1)-8);
+    oled.print(F("s"));
 
+    // Temperature Graph
     if (reflowStatus == REFLOW_STATUS_ON)
     {
       // We are updating the display faster than sensor reading
       if (timerSeconds > timerUpdate)
       {
-        // Store temperature reading every 5 s
-        if ((timerSeconds % 5) == 0 && (x > 0 || input > 50))
+        // Store temperature every 3 s
+        if ((timerSeconds % 3) == 0 && (x > 0 || input > 100))
         {
           timerUpdate = timerSeconds;
-          unsigned char averageReading = map(input, 50, 250, 63, 19);
+          unsigned char averageReading = map(input, 100, 250, 63, 0);
           if (x < (SCREEN_WIDTH - X_AXIS_START))
           {
             temperature[x++] = averageReading;
@@ -759,10 +752,45 @@ void updateDisplay(void)
       }
     }
 
+    // Temp axis ticks
+    oled.drawLine(0, 0, 2, 0);      // 250
+    oled.drawLine(0, 21, 2, 21);    // 200
+    oled.drawLine(0, 42, 2, 42);    // 150
+    oled.drawLine(0, 63, 2, 63);    // 100
+    // Temp axis labels
+    oled.setFont(u8g2_font_5x8_mn);
+    oled.setCursor(4, 24);
+    oled.print(F("200"));
+    oled.setCursor(4, 45);
+    oled.print(F("150"));
+    oled.setCursor(4, 65);
+    oled.print(F("100"));
+    // Time axis ticks
+    oled.drawLine(0, 63, 0, 61);        // 0
+    oled.drawLine(20, 63, 20, 61);      // 60
+    oled.drawLine(40, 63, 40, 61);      // 120
+    oled.drawLine(60, 63, 60, 61);      // 180
+    oled.drawLine(80, 63, 80, 61);      // 240
+    oled.drawLine(100, 63, 100, 61);    // 300
+    oled.drawLine(120, 63, 120, 61);    // 360
+    // Time axis labels
+    oled.setFont(u8g2_font_5x8_mn);
+    oled.setCursor(33, 60);
+    oled.print(F("120"));
+    oled.setCursor(73, 60);
+    oled.print(F("240"));
+    oled.setCursor(113, 60);
+    oled.print(F("360"));
+    // graph axis
+    //oled.drawLine(0, 0, 0, 63);
+    //oled.drawLine(0, 63, 127, 63);
+
     unsigned char timeAxis;
     for (timeAxis = 0; timeAxis < x; timeAxis++)
     {
+      oled.setDrawColor(2);
       oled.drawPixel(timeAxis + X_AXIS_START, temperature[timeAxis]);
+      oled.setDrawColor(1);
     }
 
     // Update screen
