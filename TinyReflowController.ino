@@ -173,7 +173,7 @@ const char* lcdMessagesReflowStatus[] = {
 // MAX38155(SPI):   4=SCK, 5=SDO,        CS=7
 // MAX38156(SPI):   4=SCK, 5=SDO, 6=SDI, CS=7
 // SSD1306(I2C):    8=SDA, 9=SCL
-unsigned char ssrPin = 0;
+unsigned char heaterPin = 0;
 unsigned char switchLfPbPin = 7;
 unsigned char switchStartStopPin = 10;
 unsigned char thermocoupleCSPin = 3;
@@ -293,9 +293,9 @@ void setup()
   pinMode(switchStartStopPin, INPUT_PULLUP);
   pinMode(switchLfPbPin, INPUT_PULLUP);
 
-  // SSR pin initialization to ensure reflow oven is off
-  digitalWrite(ssrPin, LOW);
-  pinMode(ssrPin, OUTPUT);
+  // Heater SSR pin initialization to ensure reflow oven is off
+  digitalWrite(heaterPin, LOW);
+  pinMode(heaterPin, OUTPUT);
 
   // Buzzer pin initialization to ensure annoying buzzer is off
   digitalWrite(buzzerPin, LOW);
@@ -479,9 +479,8 @@ void loop()
       if (input >= (reflowTemperatureMax - 5))
       {
         // REFLOW -> COOL
-        // TODO: cooling
         // Set PID parameters for cooling ramp
-        reflowOvenPID.SetTunings(PID_KP_REFLOW, PID_KI_REFLOW, PID_KD_REFLOW);
+        //reflowOvenPID.SetTunings(PID_KP_COOL, PID_KI_COOL, PID_KD_COOL);
         // Ramp down to minimum cooling temperature
         setpoint = TEMPERATURE_COOL_MIN;
         // Proceed to cooling state
@@ -603,19 +602,19 @@ void loop()
 
     if (output > (now - windowStartTime))
     {
-      // heater is on
-      digitalWrite(ssrPin, HIGH);
+      // Heater is on
+      digitalWrite(heaterPin, HIGH);
     }
     else
     {
-      // heater is off
-      digitalWrite(ssrPin, LOW);
+      // Heater is off
+      digitalWrite(heaterPin, LOW);
     }
   }
   else
   {
     // ensure heater is off
-    digitalWrite(ssrPin, LOW);
+    digitalWrite(heaterPin, LOW);
   }
 
   updateDisplay();
@@ -674,7 +673,7 @@ void updateDisplay(void)
     oled.clearBuffer();
     // Reflow state: top left
     oled.setFont(u8g2_font_profont17_mf);
-    if (digitalRead(ssrPin) == HIGH) {
+    if (digitalRead(heaterPin) == HIGH) {
         drawStrInverted(4, LINE(0,2), lcdMessagesReflowStatus[reflowState]);
     } else {
         oled.drawStr(4, LINE(0,2), lcdMessagesReflowStatus[reflowState]);
