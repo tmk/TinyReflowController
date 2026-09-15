@@ -151,12 +151,6 @@ typedef enum REFLOW_STATE
   REFLOW_STATE_ERROR
 } reflowState_t;
 
-typedef enum REFLOW_STATUS
-{
-  REFLOW_STATUS_OFF,
-  REFLOW_STATUS_ON
-} reflowStatus_t;
-
 typedef enum REFLOW_PROFILE
 {
   REFLOW_PROFILE_LEADFREE,
@@ -199,8 +193,6 @@ double soakStepTemp;
 unsigned long soakStepPeriod;
 // Reflow oven controller state machine state variable
 reflowState_t reflowState;
-// Reflow oven controller status
-reflowStatus_t reflowStatus;
 // Reflow profile type
 reflowProfile_t reflowProfile;
 
@@ -353,7 +345,10 @@ void loop()
     readThermocouple();
 
     // If reflow process is on going
-    if (reflowStatus == REFLOW_STATUS_ON)
+    if (reflowState == REFLOW_STATE_PREHEAT ||
+        reflowState == REFLOW_STATE_SOAK ||
+        reflowState == REFLOW_STATE_REFLOW ||
+        reflowState == REFLOW_STATE_COOL)
     {
       // Increase seconds timer for reflow curve plot
       timerSeconds++;
@@ -442,7 +437,6 @@ void loop()
       break;
 
     case REFLOW_STATE_PREHEAT:
-      reflowStatus = REFLOW_STATUS_ON;
       // If minimum soak temperature is achieve
       if (input >= soakTemperatureMin)
       {
@@ -501,8 +495,6 @@ void loop()
       if (input <= TEMPERATURE_COOL_MIN)
       {
         // COOL -> IDLE
-        // Turn off reflow process
-        reflowStatus = REFLOW_STATUS_OFF;
         // Proceed to reflow Completion state
         reflowState = REFLOW_STATE_IDLE;
         tone(buzzerPin, 3000, 3000);
@@ -557,11 +549,12 @@ void loop()
   if (switchStatus == SWITCH_1)
   {
     // If currently reflow process is on going
-    if (reflowStatus == REFLOW_STATUS_ON)
+    if (reflowState == REFLOW_STATE_PREHEAT ||
+        reflowState == REFLOW_STATE_SOAK ||
+        reflowState == REFLOW_STATE_REFLOW ||
+        reflowState == REFLOW_STATE_COOL)
     {
       // ABORT
-      // Turn off reflow process
-      reflowStatus = REFLOW_STATUS_OFF;
       // Reinitialize state machine
       reflowState = REFLOW_STATE_IDLE;
       tone(buzzerPin, 3000, 1000);
@@ -594,8 +587,10 @@ void loop()
     }
   }
 
-  // PID computation and SSR control
-  if (reflowStatus == REFLOW_STATUS_ON)
+  // Heater control
+  if (reflowState == REFLOW_STATE_PREHEAT ||
+      reflowState == REFLOW_STATE_SOAK ||
+      reflowState == REFLOW_STATE_REFLOW)
   {
     unsigned long now = millis();
 
@@ -663,7 +658,6 @@ void readThermocouple(void)
     {
       // Illegal operation
       reflowState = REFLOW_STATE_ERROR;
-      reflowStatus = REFLOW_STATUS_OFF;
       serial_println(F("TC Error"));
     }
 }
@@ -734,7 +728,10 @@ void updateDisplay(void)
     oled.print(F("s"));
 
     // Temperature Graph
-    if (reflowStatus == REFLOW_STATUS_ON)
+    if (reflowState == REFLOW_STATE_PREHEAT ||
+        reflowState == REFLOW_STATE_SOAK ||
+        reflowState == REFLOW_STATE_REFLOW ||
+        reflowState == REFLOW_STATE_COOL)
     {
       // We are updating the display faster than sensor reading
       if (timerSeconds > timerUpdate)
