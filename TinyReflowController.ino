@@ -380,6 +380,8 @@ void loop()
         // If switch is pressed to start reflow process
         if (switchStatus == SWITCH_1)
         {
+          switchStatus = SWITCH_NONE;
+
           // START: IDLE -> PREHEAT
           // Send header for data
           serial_println(F("TinyReflowController build at " __DATE__ " " __TIME__));
